@@ -181,7 +181,6 @@ def back_keyboard():
 def contacts_keyboard():
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="📞 Позвонить", url="tel:+79009224496")],
             [InlineKeyboardButton(text="💬 Написать в WhatsApp", url="https://wa.me/79009224496")],
             [InlineKeyboardButton(text="✉️ Написать email", url="mailto:magicherbs4you@yandex.ru")],
             [InlineKeyboardButton(text="🌐 Перейти на сайт", url="https://mherbs.ru")],
@@ -191,9 +190,6 @@ def contacts_keyboard():
 
 
 BOT_TOKEN = os.environ["BOT_TOKEN"]
-print(f"DEBUG: BOT_TOKEN длина = {len(BOT_TOKEN)}")
-print(f"DEBUG: BOT_TOKEN начинается = {BOT_TOKEN[:15]}")
-print(f"DEBUG: BOT_TOKEN заканчивается = {BOT_TOKEN[-10:]}")
 ADMIN_ID = int(os.environ["ADMIN_ID"])
 
 YOOKASSA_SHOP_ID = os.environ.get("YOOKASSA_SHOP_ID", "")
@@ -330,6 +326,8 @@ async def handle_order(request: web.Request):
 
     user_data = json.loads(verified.get("user", "{}"))
     user_id = user_data.get("id")
+    username = user_data.get("username", "")
+    first_name = user_data.get("first_name", "")
     if not user_id:
         return web.json_response({"ok": False, "error": "no user id"}, status=400)
 
@@ -363,6 +361,14 @@ async def handle_order(request: web.Request):
 
     payment_method = body.get("payment")
 
+    client_line = (
+        f"👤 Клиент: {esc_md(first_name)}\n"
+        f"🔗 Юзернейм: @{esc_md(username)}\n" if username else
+        f"👤 Клиент: {esc_md(first_name)}\n"
+        f"🔗 Юзернейм: нет\n"
+    )
+    client_line += f"🆔 ID: `{user_id}`\n"
+
     if payment_method == "yookassa":
         result = await create_yookassa_payment(amount, order_id, user_id)
         if result:
@@ -382,6 +388,7 @@ async def handle_order(request: web.Request):
                     f"🆕 *Новый заказ — ожидает оплаты (ЮKassa)*\n\n"
                     f"Номер: `{order_id}`\n"
                     f"Сумма: *{amount} ₽*\n"
+                    f"{client_line}\n"
                     f"Доставка: {esc_md(str(body.get('delivery', '—')))}\n\n"
                     f"*Контакты клиента:*\n{customer_lines}\n\n"
                     f"*Товары:*\n{items_lines}",
@@ -408,6 +415,7 @@ async def handle_order(request: web.Request):
             f"🆕 *Новый заказ (ручная оплата)*\n\n"
             f"Номер: `{order_id}`\n"
             f"Сумма: *{amount} ₽*\n"
+            f"{client_line}\n"
             f"Доставка: {esc_md(str(body.get('delivery', '—')))}\n"
             f"Оплата: {esc_md(str(payment_method or '—'))}\n\n"
             f"*Контакты клиента:*\n{customer_lines}\n\n"
@@ -419,6 +427,57 @@ async def handle_order(request: web.Request):
         return web.json_response({"ok": False, "error": "cannot message user"}, status=502)
 
     return web.json_response({"ok": True, "manual": True})
+
+
+async def handle_yookassa_webhook(request: web.Request):
+    try:
+        body = await request.json()
+    except Exception:
+        return web.json_response({"ok": False}, status=400)
+
+    event = body.get("event")
+    payment_obj = body.get("object", {})
+    payment_id = payment_obj.get("id")
+    metadata = payment_obj.get("metadata", {})
+    order_id = metadata.get("order_id")
+
+    log.info(f"ЮKassa webhook: event={event}, order_id={order_id}")
+
+    if event == "payment.succeeded" and order_id:
+        order = orders_db.get(order_id)
+        if order:
+            order["status"] = "paid"
+            order["yookassa_payment_id"] = payment_id
+
+            user_id = order.get("user_id")
+            amount = order.get("amount")
+
+            try:
+                await bot.send_message(
+                    user_id,
+                    f"✅ *Оплата прошла!*\n\n"
+                    f"Заказ `{order_id}` на сумму *{amount} ₽* успешно оплачен.\n"
+                    f"Мы свяжемся с вами для уточнения доставки. Спасибо! 🌲",
+                    parse_mode="Markdown",
+                )
+                await bot.send_message(
+                    ADMIN_ID,
+                    f"✅ *Оплата получена!*\n\n"
+                    f"Заказ: `{order_id}`\n"
+                    f"Сумма: *{amount} ₽*\n"
+                    f"Клиент: ID `{user_id}`",
+                    parse_mode="Markdown",
+                )
+            except Exception:
+                log.exception("Не удалось отправить уведомление об оплате")
+
+    elif event == "payment.canceled" and order_id:
+        order = orders_db.get(order_id)
+        if order:
+            order["status"] = "cancelled"
+            log.info(f"Платёж отменён: {order_id}")
+
+    return web.json_response({"ok": True})
 
 
 @dp.message(Command("start"))
@@ -467,7 +526,9 @@ async def menu_back_handler(callback: CallbackQuery):
 async def start_web_server():
     app = web.Application(middlewares=[cors_middleware])
     app.router.add_post("/webhook/order", handle_order)
+    app.router.add_post("/webhook/yookassa", handle_yookassa_webhook)
     app.router.add_options("/webhook/order", lambda r: web.Response())
+    app.router.add_options("/webhook/yookassa", lambda r: web.Response())
     app.router.add_get("/health", lambda r: web.json_response({"ok": True}))
 
     runner = web.AppRunner(app)
