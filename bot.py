@@ -191,6 +191,9 @@ def contacts_keyboard():
 
 
 BOT_TOKEN = os.environ["BOT_TOKEN"]
+print(f"DEBUG: BOT_TOKEN длина = {len(BOT_TOKEN)}")
+print(f"DEBUG: BOT_TOKEN начинается = {BOT_TOKEN[:15]}")
+print(f"DEBUG: BOT_TOKEN заканчивается = {BOT_TOKEN[-10:]}")
 ADMIN_ID = int(os.environ["ADMIN_ID"])
 
 YOOKASSA_SHOP_ID = os.environ.get("YOOKASSA_SHOP_ID", "")
