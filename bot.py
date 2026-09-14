@@ -264,12 +264,24 @@ async def show_menu_section(
         pass
 
     photo = get_photo(photo_filename)
+    MAX_CAPTION_LEN = 1024
+
     try:
-        if photo:
+        if photo and len(text) <= MAX_CAPTION_LEN:
+            # Короткий текст — с фото
             await bot.send_photo(
                 callback.from_user.id,
                 photo,
                 caption=text,
+                parse_mode="Markdown",
+                reply_markup=keyboard
+            )
+        elif photo:
+            # Длинный текст — фото отдельно, текст отдельно
+            await bot.send_photo(callback.from_user.id, photo)
+            await bot.send_message(
+                callback.from_user.id,
+                text,
                 parse_mode="Markdown",
                 reply_markup=keyboard
             )
@@ -287,7 +299,6 @@ async def show_menu_section(
         await callback.answer()
     except Exception:
         pass
-
 
 def esc_md(text: str) -> str:
     for ch in ("\\", "_", "*", "`", "["):
@@ -577,16 +588,13 @@ async def start_command(message: Message):
 async def menu_faq_handler(callback: CallbackQuery):
     await show_menu_section(callback, get_text("faq"), PHOTO_FAQ, back_keyboard())
 
-
 @dp.callback_query(F.data == "menu_delivery")
 async def menu_delivery_handler(callback: CallbackQuery):
     await show_menu_section(callback, get_text("delivery"), PHOTO_DELIVERY, back_keyboard())
 
-
 @dp.callback_query(F.data == "menu_about")
 async def menu_about_handler(callback: CallbackQuery):
     await show_menu_section(callback, get_text("about"), PHOTO_ABOUT, back_keyboard())
-
 
 @dp.callback_query(F.data == "menu_contacts")
 async def menu_contacts_handler(callback: CallbackQuery):
