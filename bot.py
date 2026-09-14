@@ -6,7 +6,6 @@ import hmac
 import hashlib
 import uuid
 from urllib.parse import parse_qsl
-from datetime import datetime
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -16,7 +15,7 @@ from aiohttp import web
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import (
     InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo,
-    Message, CallbackQuery, FSInputFile, InputMediaPhoto
+    Message, CallbackQuery, FSInputFile
 )
 from aiogram.filters import Command
 from aiogram import F
@@ -30,124 +29,162 @@ PHOTO_ABOUT = "about.jpg"
 PHOTO_CONTACTS = "contacts.jpg"
 PHOTO_CATALOG = "catalog.jpg"
 
+TEXTS_FILE = Path(__file__).parent / "texts.json"
+
 
 def get_photo(filename: str):
-    path = PHOTOS_DIR / filename
-    if path.exists():
-        return FSInputFile(str(path))
+    try:
+        path = PHOTOS_DIR / filename
+        if path.exists():
+            return FSInputFile(str(path))
+    except Exception as e:
+        log.error(f"Ошибка загрузки фото {filename}: {e}")
     return None
 
 
-FAQ_TEXT = (
-    "❓ *Часто задаваемые вопросы*\n\n"
-    "┌─────────────────────────┐\n"
-    "│ *🌿 Товар натуральный?* │\n"
-    "└─────────────────────────┘\n"
-    "Да! Мы используем только дикорастущее сырьё Сибири и Алтая.\n"
-    "✅ Никакого искусственно выращенного или китайского сырья\n"
-    "✅ Только стеклянная тара, без пластика\n\n"
-    "┌─────────────────────────┐\n"
-    "│ *✨ В чём уникальность?* │\n"
-    "└─────────────────────────┘\n"
-    "Уникальная вакуумная низкотемпературная технология экстракции:\n"
-    "🔬 Сохраняет полезные вещества растений\n"
-    "🚫 Без выпаривания в «кастрюлях»\n"
-    "🚫 Без вредных реагентов и консервантов\n"
-    "📊 Эффективность экстракции — до 99%\n\n"
-    "┌─────────────────────────┐\n"
-    "│ *📜 Есть сертификаты?*  │\n"
-    "└─────────────────────────┘\n"
-    "Да, качество контролируется на всех этапах.\n"
-    "🔍 Сертификаты — на сайте, раздел «Протоколы».\n\n"
-    "┌─────────────────────────────┐\n"
-    "│ *🏪 На маркетплейсах есть?* │\n"
-    "└─────────────────────────────┘\n"
-    "Нет! Мы принципиально не продаём продукцию:\n"
-    "❌ На маркетплейсах\n"
-    "❌ В массмаркетах\n"
-    "💎 Только эксклюзивное качество и ограниченные объёмы\n\n"
-    "┌─────────────────────────────┐\n"
-    "│ *📦 Как отследить заказ?*  │\n"
-    "└─────────────────────────────┘\n"
-    "Трек-номер придёт на e-mail, указанный при оформлении.\n\n"
-    "❓ Не нашли ответ? Напишите нам — кнопка «Контакты» ниже."
-)
+# ===================== ТЕКСТЫ ПО УМОЛЧАНИЮ =====================
+DEFAULT_TEXTS = {
+    "welcome": (
+        "🌿 *Добро пожаловать в MagicHerbs!*\n\n"
+        "🏔️ Натуральные нутрицевтики из Сибири\n"
+        "✨ Создано природой — проверено наукой\n\n"
+        "Выберите интересующий раздел 👇"
+    ),
+    "faq": (
+        "❓ *Часто задаваемые вопросы*\n\n"
+        "┌─────────────────────────┐\n"
+        "│ *🌿 Товар натуральный?* │\n"
+        "└─────────────────────────┘\n"
+        "Да! Мы используем только дикорастущее сырьё Сибири и Алтая.\n"
+        "✅ Никакого искусственно выращенного или китайского сырья\n"
+        "✅ Только стеклянная тара, без пластика\n\n"
+        "┌─────────────────────────┐\n"
+        "│ *✨ В чём уникальность?* │\n"
+        "└─────────────────────────┘\n"
+        "Уникальная вакуумная низкотемпературная технология экстракции:\n"
+        "🔬 Сохраняет полезные вещества растений\n"
+        "🚫 Без выпаривания в «кастрюлях»\n"
+        "🚫 Без вредных реагентов и консервантов\n"
+        "📊 Эффективность экстракции — до 99%\n\n"
+        "┌─────────────────────────┐\n"
+        "│ *📜 Есть сертификаты?*  │\n"
+        "└─────────────────────────┘\n"
+        "Да, качество контролируется на всех этапах.\n"
+        "🔍 Сертификаты — на сайте, раздел «Протоколы».\n\n"
+        "┌─────────────────────────────┐\n"
+        "│ *🏪 На маркетплейсах есть?* │\n"
+        "└─────────────────────────────┘\n"
+        "Нет! Мы принципиально не продаём продукцию:\n"
+        "❌ На маркетплейсах\n"
+        "❌ В массмаркетах\n"
+        "💎 Только эксклюзивное качество и ограниченные объёмы\n\n"
+        "┌─────────────────────────────┐\n"
+        "│ *📦 Как отследить заказ?*  │\n"
+        "└─────────────────────────────┘\n"
+        "Трек-номер придёт на e-mail, указанный при оформлении.\n\n"
+        "❓ Не нашли ответ? Напишите нам — кнопка «Контакты» ниже."
+    ),
+    "delivery": (
+        "🚚 *Доставка и оплата*\n\n"
+        "┌─────────────────────────────┐\n"
+        "│   📦 *Способы доставки*     │\n"
+        "└─────────────────────────────┘\n"
+        "▸ 🚚 Стандартная — *бесплатно*, 3–5 рабочих дней\n"
+        "▸ ✈️ Экспресс — *500 ₽*, 1–2 рабочих дня\n"
+        "▸ 🎁 На заказы от *10 000 ₽* — скидка и бесплатная доставка\n\n"
+        "┌─────────────────────────────┐\n"
+        "│   💳 *Способы оплаты*       │\n"
+        "└─────────────────────────────┘\n"
+        "▸ 💳 OzonPay\n"
+        "▸ 💳 CloudPayments (Visa/Mastercard/МИР)\n"
+        "▸ 💳 Robokassa (СБП, карты, эл. кошельки)\n"
+        "▸ 💳 ЮKassa (карта, ЮMoney, SberPay)\n\n"
+        "📱 *Подробности* — на сайте, раздел «Доставка и оплата»"
+    ),
+    "about": (
+        "🌲 *О MagicHerbs*\n\n"
+        "┌─────────────────────────────┐\n"
+        "│   ✨ Наша история           │\n"
+        "└─────────────────────────────┘\n"
+        "MagicHerbs — семейный бренд, часть научно-производственного комплекса\n"
+        "с более чем *20-летней историей* на рынке.\n\n"
+        "┌─────────────────────────────┐\n"
+        "│   🌿 Наше сырьё             │\n"
+        "└─────────────────────────────┘\n"
+        "▸ Только дикорастущие травы и растения\n"
+        "▸ Собираем в экологических заповедниках Сибири\n"
+        "▸ От Горного Алтая до севера Томской области\n"
+        "▸ Производство — прямо в месте произрастания сырья\n"
+        "▸ Сохраняем высокую концентрацию полезных веществ\n\n"
+        "┌─────────────────────────────┐\n"
+        "│   🎯 Наша миссия            │\n"
+        "└─────────────────────────────┘\n"
+        "Сохранить человечество в здоровом, не видоизменённом виде:\n"
+        "🌱 Натуральные концентраты из дикорастущего сырья\n"
+        "❌ Вместо синтетических препаратов\n\n"
+        "ℹ️ Подробнее — в разделах «О нас» и «Миссия» на mherbs.ru"
+    ),
+    "contacts": (
+        "📞 *Контакты*\n\n"
+        "┌─────────────────────────────┐\n"
+        "│   📍 Адрес                  │\n"
+        "└─────────────────────────────┘\n"
+        "г. Томск\n\n"
+        "┌─────────────────────────────┐\n"
+        "│   📱 Телефон                │\n"
+        "└─────────────────────────────┘\n"
+        "☎️ +7 900 922 4496\n\n"
+        "┌─────────────────────────────┐\n"
+        "│   ✉️ Email                  │\n"
+        "└─────────────────────────────┘\n"
+        "magicherbs4you@yandex.ru\n\n"
+        "┌─────────────────────────────┐\n"
+        "│   🌐 Социальные сети        │\n"
+        "└─────────────────────────────┘\n"
+        "▸ VK: vk.com/mherbs\n"
+        "▸ Telegram: t.me/yegorogurtsov\n"
+        "▸ WhatsApp: wa.me/79009224496\n\n"
+        "┌─────────────────────────────┐\n"
+        "│   💻 Сайт                   │\n"
+        "└─────────────────────────────┘\n"
+        "mherbs.ru"
+    ),
+}
 
-DELIVERY_TEXT = (
-    "🚚 *Доставка и оплата*\n\n"
-    "┌─────────────────────────────┐\n"
-    "│   📦 *Способы доставки*     │\n"
-    "└─────────────────────────────┘\n"
-    "▸ 🚚 Стандартная — *бесплатно*, 3–5 рабочих дней\n"
-    "▸ ✈️ Экспресс — *500 ₽*, 1–2 рабочих дня\n"
-    "▸ 🎁 На заказы от *10 000 ₽* — скидка и бесплатная доставка\n\n"
-    "┌─────────────────────────────┐\n"
-    "│   💳 *Способы оплаты*       │\n"
-    "└─────────────────────────────┘\n"
-    "▸ 💳 OzonPay\n"
-    "▸ 💳 CloudPayments (Visa/Mastercard/МИР)\n"
-    "▸ 💳 Robokassa (СБП, карты, эл. кошельки)\n"
-    "▸ 💳 ЮKassa (карта, ЮMoney, SberPay)\n\n"
-    "📱 *Подробности* — на сайте, раздел «Доставка и оплата»"
-)
 
-ABOUT_TEXT = (
-    "🌲 *О MagicHerbs*\n\n"
-    "┌─────────────────────────────┐\n"
-    "│   ✨ Наша история           │\n"
-    "└─────────────────────────────┘\n"
-    "MagicHerbs — семейный бренд, часть научно-производственного комплекса\n"
-    "с более чем *20-летней историей* на рынке.\n\n"
-    "┌─────────────────────────────┐\n"
-    "│   🌿 Наше сырьё             │\n"
-    "└─────────────────────────────┘\n"
-    "▸ Только дикорастущие травы и растения\n"
-    "▸ Собираем в экологических заповедниках Сибири\n"
-    "▸ От Горного Алтая до севера Томской области\n"
-    "▸ Производство — прямо в месте произрастания сырья\n"
-    "▸ Сохраняем высокую концентрацию полезных веществ\n\n"
-    "┌─────────────────────────────┐\n"
-    "│   🎯 Наша миссия            │\n"
-    "└─────────────────────────────┘\n"
-    "Сохранить человечество в здоровом, не видоизменённом виде:\n"
-    "🌱 Натуральные концентраты из дикорастущего сырья\n"
-    "❌ Вместо синтетических препаратов\n\n"
-    "ℹ️ Подробнее — в разделах «О нас» и «Миссия» на mherbs.ru"
-)
+def load_texts():
+    """Загружает тексты из файла или создаёт с дефолтными."""
+    if TEXTS_FILE.exists():
+        try:
+            with open(TEXTS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            log.error(f"Ошибка загрузки texts.json: {e}")
+            return DEFAULT_TEXTS.copy()
+    else:
+        save_texts(DEFAULT_TEXTS)
+        return DEFAULT_TEXTS.copy()
 
-CONTACTS_TEXT = (
-    "📞 *Контакты*\n\n"
-    "┌─────────────────────────────┐\n"
-    "│   📍 Адрес                  │\n"
-    "└─────────────────────────────┘\n"
-    "г. Томск\n\n"
-    "┌─────────────────────────────┐\n"
-    "│   📱 Телефон                │\n"
-    "└─────────────────────────────┘\n"
-    "☎️ +7 900 922 4496\n\n"
-    "┌─────────────────────────────┐\n"
-    "│   ✉️ Email                  │\n"
-    "└─────────────────────────────┘\n"
-    "magicherbs4you@yandex.ru\n\n"
-    "┌─────────────────────────────┐\n"
-    "│   🌐 Социальные сети        │\n"
-    "└─────────────────────────────┘\n"
-    "▸ VK: vk.com/mherbs\n"
-    "▸ Telegram: t.me/yegorogurtsov\n"
-    "▸ WhatsApp: wa.me/79009224496\n\n"
-    "┌─────────────────────────────┐\n"
-    "│   💻 Сайт                   │\n"
-    "└─────────────────────────────┘\n"
-    "mherbs.ru"
-)
 
-WELCOME_TEXT = (
-    "🌿 *Добро пожаловать в MagicHerbs!*\n\n"
-    "🏔️ Натуральные нутрицевтики из Сибири\n"
-    "✨ Создано природой — проверено наукой\n\n"
-    "Выберите интересующий раздел 👇"
-)
+def save_texts(texts):
+    """Сохраняет тексты в файл."""
+    try:
+        with open(TEXTS_FILE, "w", encoding="utf-8") as f:
+            json.dump(texts, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        log.error(f"Ошибка сохранения texts.json: {e}")
 
+
+# Глобальный объект с текстами
+TEXTS = load_texts()
+
+
+def get_text(key):
+    """Получает текст по ключу."""
+    return TEXTS.get(key, DEFAULT_TEXTS.get(key, ""))
+
+
+# ===================== КЛАВИАТУРЫ =====================
 
 def main_menu_keyboard():
     return InlineKeyboardMarkup(
@@ -210,6 +247,9 @@ dp = Dispatcher()
 orders_db = {}
 BOT_USERNAME = None
 
+# Состояния для редактирования текстов
+editing_state = {}
+
 
 async def show_menu_section(
     callback: CallbackQuery,
@@ -218,27 +258,35 @@ async def show_menu_section(
     keyboard: InlineKeyboardMarkup
 ):
     try:
-        await callback.message.delete()
+        if callback.message:
+            await callback.message.delete()
     except Exception:
         pass
 
     photo = get_photo(photo_filename)
-    if photo:
-        await bot.send_photo(
-            callback.from_user.id,
-            photo,
-            caption=text,
-            parse_mode="Markdown",
-            reply_markup=keyboard
-        )
-    else:
-        await bot.send_message(
-            callback.from_user.id,
-            text,
-            parse_mode="Markdown",
-            reply_markup=keyboard
-        )
-    await callback.answer()
+    try:
+        if photo:
+            await bot.send_photo(
+                callback.from_user.id,
+                photo,
+                caption=text,
+                parse_mode="Markdown",
+                reply_markup=keyboard
+            )
+        else:
+            await bot.send_message(
+                callback.from_user.id,
+                text,
+                parse_mode="Markdown",
+                reply_markup=keyboard
+            )
+    except Exception as e:
+        log.error(f"Ошибка отправки меню: {e}")
+
+    try:
+        await callback.answer()
+    except Exception:
+        pass
 
 
 def esc_md(text: str) -> str:
@@ -271,8 +319,15 @@ async def create_yookassa_payment(amount, order_id, user_id):
 
     url = "https://api.yookassa.ru/v3/payments"
     idempotence_key = str(uuid.uuid4())
-    headers = {"Idempotence-Key": idempotence_key, "Content-Type": "application/json"}
-    auth = aiohttp.BasicAuth(login=YOOKASSA_SHOP_ID, password=YOOKASSA_SECRET_KEY)
+    headers = {
+        "Idempotence-Key": idempotence_key,
+        "Content-Type": "application/json",
+    }
+    auth_header = aiohttp.BasicAuth(
+        login=YOOKASSA_SHOP_ID,
+        password=YOOKASSA_SECRET_KEY
+    ).encode()
+    headers["Authorization"] = auth_header
     return_url = f"https://t.me/{BOT_USERNAME}" if BOT_USERNAME else "https://t.me/"
 
     payload = {
@@ -283,7 +338,7 @@ async def create_yookassa_payment(amount, order_id, user_id):
         "metadata": {"order_id": order_id, "user_id": str(user_id)},
     }
     try:
-        async with aiohttp.ClientSession(auth=auth) as session:
+        async with aiohttp.ClientSession() as session:
             async with session.post(url, json=payload, headers=headers) as resp:
                 data = await resp.json()
                 if resp.status in (200, 201):
@@ -361,13 +416,18 @@ async def handle_order(request: web.Request):
 
     payment_method = body.get("payment")
 
-    client_line = (
-        f"👤 Клиент: {esc_md(first_name)}\n"
-        f"🔗 Юзернейм: @{esc_md(username)}\n" if username else
-        f"👤 Клиент: {esc_md(first_name)}\n"
-        f"🔗 Юзернейм: нет\n"
-    )
-    client_line += f"🆔 ID: `{user_id}`\n"
+    if username:
+        client_line = (
+            f"👤 Клиент: {esc_md(first_name)}\n"
+            f"🔗 Юзернейм: @{esc_md(username)}\n"
+            f"🆔 ID: `{user_id}`\n"
+        )
+    else:
+        client_line = (
+            f"👤 Клиент: {esc_md(first_name)}\n"
+            f"🔗 Юзернейм: нет\n"
+            f"🆔 ID: `{user_id}`\n"
+        )
 
     if payment_method == "yookassa":
         result = await create_yookassa_payment(amount, order_id, user_id)
@@ -383,6 +443,10 @@ async def handle_order(request: web.Request):
                     f"После успешной оплаты вы автоматически получите подтверждение.",
                     parse_mode="Markdown",
                 )
+            except Exception:
+                log.exception("Не удалось отправить сообщение клиенту")
+
+            try:
                 await bot.send_message(
                     ADMIN_ID,
                     f"🆕 *Новый заказ — ожидает оплаты (ЮKassa)*\n\n"
@@ -395,8 +459,7 @@ async def handle_order(request: web.Request):
                     parse_mode="Markdown",
                 )
             except Exception:
-                log.exception("Не удалось отправить сообщение")
-                return web.json_response({"ok": False, "error": "cannot message user"}, status=502)
+                log.exception("Не удалось отправить сообщение админу")
 
             return web.json_response({"ok": True, "payment_url": result["confirmation_url"]})
 
@@ -410,6 +473,10 @@ async def handle_order(request: web.Request):
             f"Спасибо, что выбрали MagicHerbs! 🌲",
             parse_mode="Markdown",
         )
+    except Exception:
+        log.exception("Не удалось отправить сообщение клиенту")
+
+    try:
         await bot.send_message(
             ADMIN_ID,
             f"🆕 *Новый заказ (ручная оплата)*\n\n"
@@ -423,8 +490,7 @@ async def handle_order(request: web.Request):
             parse_mode="Markdown",
         )
     except Exception:
-        log.exception("Не удалось отправить сообщение")
-        return web.json_response({"ok": False, "error": "cannot message user"}, status=502)
+        log.exception("Не удалось отправить сообщение админу")
 
     return web.json_response({"ok": True, "manual": True})
 
@@ -460,6 +526,10 @@ async def handle_yookassa_webhook(request: web.Request):
                     f"Мы свяжемся с вами для уточнения доставки. Спасибо! 🌲",
                     parse_mode="Markdown",
                 )
+            except Exception:
+                log.exception("Не удалось отправить клиенту")
+
+            try:
                 await bot.send_message(
                     ADMIN_ID,
                     f"✅ *Оплата получена!*\n\n"
@@ -469,7 +539,7 @@ async def handle_yookassa_webhook(request: web.Request):
                     parse_mode="Markdown",
                 )
             except Exception:
-                log.exception("Не удалось отправить уведомление об оплате")
+                log.exception("Не удалось отправить админу")
 
     elif event == "payment.canceled" and order_id:
         order = orders_db.get(order_id)
@@ -480,47 +550,439 @@ async def handle_yookassa_webhook(request: web.Request):
     return web.json_response({"ok": True})
 
 
+# ===================== ОСНОВНЫЕ КОМАНДЫ =====================
+
 @dp.message(Command("start"))
 async def start_command(message: Message):
-    photo = get_photo(PHOTO_MAIN_MENU)
-    if photo:
-        await message.answer_photo(
-            photo,
-            caption=WELCOME_TEXT,
-            parse_mode="Markdown",
-            reply_markup=main_menu_keyboard()
-        )
-    else:
-        await message.answer(
-            WELCOME_TEXT,
-            parse_mode="Markdown",
-            reply_markup=main_menu_keyboard()
-        )
+    try:
+        photo = get_photo(PHOTO_MAIN_MENU)
+        if photo:
+            await message.answer_photo(
+                photo,
+                caption=get_text("welcome"),
+                parse_mode="Markdown",
+                reply_markup=main_menu_keyboard()
+            )
+        else:
+            await message.answer(
+                get_text("welcome"),
+                parse_mode="Markdown",
+                reply_markup=main_menu_keyboard()
+            )
+    except Exception as e:
+        log.exception(f"Ошибка в /start: {e}")
 
 
 @dp.callback_query(F.data == "menu_faq")
 async def menu_faq_handler(callback: CallbackQuery):
-    await show_menu_section(callback, FAQ_TEXT, PHOTO_FAQ, back_keyboard())
+    await show_menu_section(callback, get_text("faq"), PHOTO_FAQ, back_keyboard())
 
 
 @dp.callback_query(F.data == "menu_delivery")
 async def menu_delivery_handler(callback: CallbackQuery):
-    await show_menu_section(callback, DELIVERY_TEXT, PHOTO_DELIVERY, back_keyboard())
+    await show_menu_section(callback, get_text("delivery"), PHOTO_DELIVERY, back_keyboard())
 
 
 @dp.callback_query(F.data == "menu_about")
 async def menu_about_handler(callback: CallbackQuery):
-    await show_menu_section(callback, ABOUT_TEXT, PHOTO_ABOUT, back_keyboard())
+    await show_menu_section(callback, get_text("about"), PHOTO_ABOUT, back_keyboard())
 
 
 @dp.callback_query(F.data == "menu_contacts")
 async def menu_contacts_handler(callback: CallbackQuery):
-    await show_menu_section(callback, CONTACTS_TEXT, PHOTO_CONTACTS, contacts_keyboard())
+    await show_menu_section(callback, get_text("contacts"), PHOTO_CONTACTS, contacts_keyboard())
 
 
 @dp.callback_query(F.data == "menu_back")
 async def menu_back_handler(callback: CallbackQuery):
-    await show_menu_section(callback, WELCOME_TEXT, PHOTO_MAIN_MENU, main_menu_keyboard())
+    await show_menu_section(callback, get_text("welcome"), PHOTO_MAIN_MENU, main_menu_keyboard())
+
+
+# ===================== АДМИН-ПАНЕЛЬ =====================
+
+@dp.message(Command("admin"))
+async def cmd_admin(message: Message):
+    if message.from_user.id != ADMIN_ID:
+        await message.answer("⛔ Нет доступа.")
+        return
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📦 Заказы", callback_data="admin_orders")],
+            [InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats")],
+            [InlineKeyboardButton(text="✏️ Редактировать тексты", callback_data="admin_edit_texts")],
+            [InlineKeyboardButton(text="🛒 Товары (в каталоге)", callback_data="admin_products_hint")],
+            [InlineKeyboardButton(text="❌ Закрыть", callback_data="admin_close")],
+        ]
+    )
+
+    await message.answer(
+        "🔧 *Админ-панель MagicHerbs*\n\n"
+        "Выберите раздел:",
+        parse_mode="Markdown",
+        reply_markup=keyboard
+    )
+
+
+@dp.callback_query(F.data == "admin_orders")
+async def admin_orders(callback: CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+
+    if not orders_db:
+        await callback.message.edit_text(
+            "📭 *Заказов пока нет.*",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_back")]]
+            )
+        )
+        await callback.answer()
+        return
+
+    orders_list = list(orders_db.items())[-10:]
+    orders_list.reverse()
+
+    text = "📦 *Последние заказы:*\n\n"
+    keyboard_buttons = []
+
+    for order_id, order in orders_list:
+        status_emoji = {
+            "pending_payment": "⏳",
+            "paid": "✅",
+            "cancelled": "❌"
+        }.get(order.get("status", ""), "❓")
+
+        amount = order.get("amount", 0)
+        short_id = order_id[-8:] if len(order_id) > 8 else order_id
+
+        text += f"{status_emoji} `{short_id}` — {amount} ₽\n"
+        keyboard_buttons.append([
+            InlineKeyboardButton(
+                text=f"{status_emoji} {short_id} ({amount}₽)",
+                callback_data=f"admin_order_{order_id}"
+            )
+        ])
+
+    keyboard_buttons.append([
+        InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_back")
+    ])
+
+    await callback.message.edit_text(
+        text,
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("admin_order_"))
+async def admin_order_detail(callback: CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+
+    order_id = callback.data.replace("admin_order_", "")
+    order = orders_db.get(order_id)
+
+    if not order:
+        await callback.answer("Заказ не найден", show_alert=True)
+        return
+
+    customer = order.get("customer", {})
+    items = order.get("items", [])
+    status = order.get("status", "unknown")
+
+    status_text = {
+        "pending_payment": "⏳ Ожидает оплаты",
+        "paid": "✅ Оплачен",
+        "cancelled": "❌ Отменён"
+    }.get(status, status)
+
+    if isinstance(items, list):
+        items_lines = "\n".join(
+            f"  • {esc_md(it.get('title', it.get('id', '?')))} — {it.get('qty', '?')} шт. × {it.get('price', '?')} ₽"
+            for it in items
+        )
+    else:
+        items_lines = esc_md(str(items))
+
+    customer_lines = "\n".join(f"  {esc_md(str(k))}: {esc_md(str(v))}" for k, v in customer.items())
+
+    text = (
+        f"📦 *Заказ* `{order_id}`\n\n"
+        f"Статус: {status_text}\n"
+        f"Сумма: *{order.get('amount', 0)} ₽*\n"
+        f"Доставка: {esc_md(str(order.get('delivery', '—')))}\n"
+        f"Оплата: {esc_md(str(order.get('payment', '—')))}\n\n"
+        f"*Контакты клиента:*\n{customer_lines}\n\n"
+        f"*Товары:*\n{items_lines}"
+    )
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="✅ Отметить оплаченным", callback_data=f"admin_mark_paid_{order_id}")],
+            [InlineKeyboardButton(text="❌ Отменить заказ", callback_data=f"admin_mark_cancel_{order_id}")],
+            [InlineKeyboardButton(text="⬅️ К заказам", callback_data="admin_orders")],
+        ]
+    )
+
+    await callback.message.edit_text(text, parse_mode="Markdown", reply_markup=keyboard)
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("admin_mark_paid_"))
+async def admin_mark_paid(callback: CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+
+    order_id = callback.data.replace("admin_mark_paid_", "")
+    order = orders_db.get(order_id)
+
+    if not order:
+        await callback.answer("Заказ не найден", show_alert=True)
+        return
+
+    order["status"] = "paid"
+    await callback.answer("Заказ отмечен оплаченным")
+    await callback.message.edit_text(
+        f"✅ Заказ `{order_id}` отмечен как *оплаченный*.",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text="⬅️ К заказам", callback_data="admin_orders")]]
+        )
+    )
+
+
+@dp.callback_query(F.data.startswith("admin_mark_cancel_"))
+async def admin_mark_cancel(callback: CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+
+    order_id = callback.data.replace("admin_mark_cancel_", "")
+    order = orders_db.get(order_id)
+
+    if not order:
+        await callback.answer("Заказ не найден", show_alert=True)
+        return
+
+    order["status"] = "cancelled"
+    await callback.answer("Заказ отменён")
+    await callback.message.edit_text(
+        f"❌ Заказ `{order_id}` отменён.",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text="⬅️ К заказам", callback_data="admin_orders")]]
+        )
+    )
+
+
+@dp.callback_query(F.data == "admin_stats")
+async def admin_stats(callback: CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+
+    total_orders = len(orders_db)
+    paid_orders = sum(1 for o in orders_db.values() if o.get("status") == "paid")
+    pending_orders = sum(1 for o in orders_db.values() if o.get("status") == "pending_payment")
+    cancelled_orders = sum(1 for o in orders_db.values() if o.get("status") == "cancelled")
+
+    total_revenue = sum(
+        o.get("amount", 0) for o in orders_db.values()
+        if o.get("status") == "paid"
+    )
+
+    text = (
+        f"📊 *Статистика MagicHerbs*\n\n"
+        f"📦 Всего заказов: *{total_orders}*\n"
+        f"✅ Оплачено: *{paid_orders}*\n"
+        f"⏳ Ожидают: *{pending_orders}*\n"
+        f"❌ Отменено: *{cancelled_orders}*\n\n"
+        f"💰 Выручка: *{total_revenue} ₽*"
+    )
+
+    await callback.message.edit_text(
+        text,
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_back")]]
+        )
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data == "admin_products_hint")
+async def admin_products_hint(callback: CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+
+    await callback.message.edit_text(
+        "🛒 *Управление товарами*\n\n"
+        "Товары редактируются в каталоге (Mini App).\n\n"
+        "Откройте каталог через кнопку в /start — там будет кнопка «Админ».",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_back")]]
+        )
+    )
+    await callback.answer()
+
+
+# ===================== РЕДАКТИРОВАНИЕ ТЕКСТОВ =====================
+
+@dp.callback_query(F.data == "admin_edit_texts")
+async def admin_edit_texts(callback: CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🌿 Приветствие", callback_data="admin_edit_welcome")],
+            [InlineKeyboardButton(text="❓ FAQ", callback_data="admin_edit_faq")],
+            [InlineKeyboardButton(text="🚚 Доставка", callback_data="admin_edit_delivery")],
+            [InlineKeyboardButton(text="🌲 О бренде", callback_data="admin_edit_about")],
+            [InlineKeyboardButton(text="📞 Контакты", callback_data="admin_edit_contacts")],
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_back")],
+        ]
+    )
+
+    await callback.message.edit_text(
+        "✏️ *Редактирование текстов*\n\n"
+        "Выберите, что хотите изменить:",
+        parse_mode="Markdown",
+        reply_markup=keyboard
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("admin_edit_"))
+async def admin_edit_choice(callback: CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+
+    key = callback.data.replace("admin_edit_", "")
+
+    if key not in DEFAULT_TEXTS:
+        await callback.answer("Раздел не найден", show_alert=True)
+        return
+
+    names = {
+        "welcome": "Приветствие",
+        "faq": "FAQ",
+        "delivery": "Доставка",
+        "about": "О бренде",
+        "contacts": "Контакты"
+    }
+
+    editing_state[callback.from_user.id] = key
+
+    current_text = get_text(key)
+    preview = current_text[:500] + ("..." if len(current_text) > 500 else "")
+
+    await callback.message.edit_text(
+        f"✏️ *Редактирование: {names.get(key, key)}*\n\n"
+        f"*Текущий текст:*\n{preview}\n\n"
+        f"Отправьте новый текст одним сообщением.",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="❌ Отмена", callback_data="admin_cancel_edit")]
+            ]
+        )
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data == "admin_cancel_edit")
+async def admin_cancel_edit(callback: CallbackQuery):
+    editing_state.pop(callback.from_user.id, None)
+    await callback.answer("Отменено")
+    await callback.message.edit_text(
+        "✏️ Редактирование отменено.",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_edit_texts")]]
+        )
+    )
+
+
+@dp.message(F.text & ~F.text.startswith("/"))
+async def handle_text_edit(message: Message):
+    if message.from_user.id != ADMIN_ID:
+        return
+
+    key = editing_state.get(message.from_user.id)
+    if not key:
+        return
+
+    new_text = message.text
+    TEXTS[key] = new_text
+    save_texts(TEXTS)
+    editing_state.pop(message.from_user.id, None)
+
+    names = {
+        "welcome": "Приветствие",
+        "faq": "FAQ",
+        "delivery": "Доставка",
+        "about": "О бренде",
+        "contacts": "Контакты"
+    }
+
+    await message.answer(
+        f"✅ *Текст «{names.get(key, key)}» обновлён!*\n\n"
+        f"Новый текст сохранён. Бот будет показывать его.",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="✏️ Ещё", callback_data="admin_edit_texts")],
+                [InlineKeyboardButton(text="⬅️ В админ-панель", callback_data="admin_back")],
+            ]
+        )
+    )
+
+
+@dp.callback_query(F.data == "admin_back")
+async def admin_back(callback: CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📦 Заказы", callback_data="admin_orders")],
+            [InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats")],
+            [InlineKeyboardButton(text="✏️ Редактировать тексты", callback_data="admin_edit_texts")],
+            [InlineKeyboardButton(text="🛒 Товары (в каталоге)", callback_data="admin_products_hint")],
+            [InlineKeyboardButton(text="❌ Закрыть", callback_data="admin_close")],
+        ]
+    )
+
+    await callback.message.edit_text(
+        "🔧 *Админ-панель MagicHerbs*\n\n"
+        "Выберите раздел:",
+        parse_mode="Markdown",
+        reply_markup=keyboard
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data == "admin_close")
+async def admin_close(callback: CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+
+    try:
+        await callback.message.delete()
+    except Exception:
+        pass
+    await callback.answer()
 
 
 async def start_web_server():
@@ -541,9 +1003,13 @@ async def start_web_server():
 async def main():
     global BOT_USERNAME
 
-    me = await bot.get_me()
-    BOT_USERNAME = me.username
-    log.info(f"🤖 Бот: @{BOT_USERNAME}")
+    try:
+        me = await bot.get_me()
+        BOT_USERNAME = me.username
+        log.info(f"🤖 Бот: @{BOT_USERNAME}")
+    except Exception as e:
+        log.error(f"Не удалось получить информацию о боте: {e}")
+        return
 
     if YOOKASSA_SHOP_ID and YOOKASSA_SECRET_KEY:
         log.info("💳 ЮKassa настроена — автоматическая оплата доступна")
@@ -552,8 +1018,25 @@ async def main():
 
     await start_web_server()
     log.info("🚀 Бот запущен и готов к работе!")
-    await dp.start_polling(bot, skip_updates=True)
+
+    while True:
+        try:
+            await dp.start_polling(bot, skip_updates=True)
+        except Exception as e:
+            log.error(f"Ошибка polling: {e}")
+            log.info("Перезапуск через 5 секунд...")
+            await asyncio.sleep(5)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    while True:
+        try:
+            asyncio.run(main())
+        except KeyboardInterrupt:
+            log.info("Бот остановлен вручную")
+            break
+        except Exception as e:
+            log.error(f"Критическая ошибка: {e}")
+            log.info("Перезапуск через 10 секунд...")
+            import time
+            time.sleep(10)
