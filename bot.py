@@ -219,7 +219,6 @@ def contacts_keyboard():
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="💬 Написать в WhatsApp", url="https://wa.me/79009224496")],
-            [InlineKeyboardButton(text="✉️ Написать email", url="mailto:magicherbs4you@yandex.ru")],
             [InlineKeyboardButton(text="🌐 Перейти на сайт", url="https://mherbs.ru")],
             [InlineKeyboardButton(text="⬅️ Назад в меню", callback_data="menu_back")],
         ]
