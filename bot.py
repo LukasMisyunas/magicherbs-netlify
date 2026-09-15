@@ -31,8 +31,6 @@ PHOTO_CONTACTS = "contacts.jpg"
 
 TEXTS_FILE = Path(__file__).parent / "texts.json"
 FAQ_FILE = Path(__file__).parent / "faq.json"
-DELIVERY_FILE = Path(__file__).parent / "delivery.json"
-ABOUT_FILE = Path(__file__).parent / "about.json"
 CONTACTS_FILE = Path(__file__).parent / "contacts.json"
 
 logging.basicConfig(
@@ -59,6 +57,37 @@ DEFAULT_TEXTS = {
         "🏔️ Натуральные нутрицевтики из Сибири\n"
         "✨ Создано природой — проверено наукой\n\n"
         "Выберите интересующий раздел 👇"
+    ),
+    "delivery": (
+        "🚚 *Доставка и оплата*\n\n"
+        "📦 *Способы доставки:*\n\n"
+        "🚚 *Стандартная* — бесплатно\n"
+        "Срок: 3–5 рабочих дней\n\n"
+        "✈️ *Экспресс* — 500 ₽\n"
+        "Срок: 1–2 рабочих дня\n\n"
+        "🎁 *Бонус:* на заказы от 10 000 ₽ — скидка и бесплатная доставка\n\n"
+        "💳 *Способы оплаты:*\n\n"
+        "▸ 💳 OzonPay\n"
+        "▸ 💳 CloudPayments — Visa, Mastercard, МИР\n"
+        "▸ 💳 Robokassa — СБП, карты, кошельки\n"
+        "▸ 💳 ЮKassa — карта, ЮMoney, SberPay"
+    ),
+    "about": (
+        "🌲 *О бренде MagicHerbs*\n\n"
+        "✨ *Наша история*\n"
+        "MagicHerbs — семейный бренд, часть научно-производственного комплекса "
+        "с более чем *20-летней историей* на рынке.\n\n"
+        "🌿 *Наше сырьё*\n"
+        "▸ Только дикорастущие травы и растения\n"
+        "▸ Собираем в экологических заповедниках Сибири\n"
+        "▸ От Горного Алтая до севера Томской области\n"
+        "▸ Производство — прямо в месте произрастания сырья\n"
+        "▸ Сохраняем высокую концентрацию полезных веществ\n\n"
+        "🎯 *Наша миссия*\n"
+        "Сохранить человечество в здоровом, не видоизменённом виде:\n"
+        "🌱 Натуральные концентраты из дикорастущего сырья\n"
+        "❌ Вместо синтетических препаратов\n\n"
+        "ℹ️ Подробнее — на mherbs.ru"
     ),
 }
 
@@ -107,62 +136,6 @@ DEFAULT_FAQ = {
         "answer": (
             "📦 *Как отследить заказ?*\n\n"
             "Трек-номер придёт на e-mail, указанный при оформлении."
-        ),
-    },
-}
-
-# ===================== ДОСТАВКА =====================
-DEFAULT_DELIVERY = {
-    "d_shipping": {
-        "title": "📦 Доставка",
-        "answer": (
-            "📦 *Способы доставки*\n\n"
-            "🚚 *Стандартная* — бесплатно\n"
-            "Срок: 3–5 рабочих дней\n\n"
-            "✈️ *Экспресс* — 500 ₽\n"
-            "Срок: 1–2 рабочих дня\n\n"
-            "🎁 *Бонус:* от 10 000 ₽ — скидка и бесплатная доставка"
-        ),
-    },
-    "d_payment": {
-        "title": "💳 Оплата",
-        "answer": (
-            "💳 *Способы оплаты*\n\n"
-            "▸ 💳 OzonPay\n"
-            "▸ 💳 CloudPayments — Visa, Mastercard, МИР\n"
-            "▸ 💳 Robokassa — СБП, карты, кошельки\n"
-            "▸ 💳 ЮKassa — карта, ЮMoney, SberPay"
-        ),
-    },
-}
-
-# ===================== О БРЕНДЕ =====================
-DEFAULT_ABOUT = {
-    "a_history": {
-        "title": "✨ История",
-        "answer": (
-            "✨ *Наша история*\n\n"
-            "MagicHerbs — семейный бренд, часть научно-производственного комплекса "
-            "с более чем *20-летней историей* на рынке."
-        ),
-    },
-    "a_raw": {
-        "title": "🌿 Сырьё",
-        "answer": (
-            "🌿 *Наше сырьё*\n\n"
-            "▸ Только дикорастущие травы и растения\n"
-            "▸ Собираем в экологических заповедниках Сибири\n"
-            "▸ От Горного Алтая до севера Томской области\n"
-            "▸ Производство — прямо в месте произрастания сырья"
-        ),
-    },
-    "a_mission": {
-        "title": "🎯 Миссия",
-        "answer": (
-            "🎯 *Наша миссия*\n\n"
-            "Сохранить человечество в здоровом, не видоизменённом виде:\n\n"
-            "🌱 Натуральные концентраты из дикорастущего сырья\n"
-            "❌ Вместо синтетических препаратов"
         ),
     },
 }
@@ -221,8 +194,6 @@ def save_json(path, data):
 
 TEXTS = load_json(TEXTS_FILE, DEFAULT_TEXTS)
 FAQ = load_json(FAQ_FILE, DEFAULT_FAQ)
-DELIVERY = load_json(DELIVERY_FILE, DEFAULT_DELIVERY)
-ABOUT = load_json(ABOUT_FILE, DEFAULT_ABOUT)
 CONTACTS = load_json(CONTACTS_FILE, DEFAULT_CONTACTS)
 
 
@@ -246,31 +217,32 @@ BOT_USERNAME = None
 
 editing_state = {}
 
-# ID сообщений (для каждого пользователя)
-menu_message_ids = {}    # главное меню
-info_message_ids = {}    # инфо-сообщение (FAQ/Доставка/итд)
+menu_message_ids = {}
+info_message_ids = {}
 
 
 # ===================== КЛАВИАТУРЫ =====================
 
-def main_menu_keyboard():
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="🛒 Открыть каталог", web_app=WebAppInfo(url=WEBAPP_URL))],
-            [
-                InlineKeyboardButton(text="❓ FAQ", callback_data="open_faq"),
-                InlineKeyboardButton(text="🚚 Доставка", callback_data="open_delivery"),
-            ],
-            [
-                InlineKeyboardButton(text="🌲 О бренде", callback_data="open_about"),
-                InlineKeyboardButton(text="📞 Контакты", callback_data="open_contacts"),
-            ],
-        ]
-    )
+def main_menu_keyboard(user_id: int = None):
+    buttons = [
+        [InlineKeyboardButton(text="🛒 Открыть каталог", web_app=WebAppInfo(url=WEBAPP_URL))],
+        [
+            InlineKeyboardButton(text="❓ FAQ", callback_data="open_faq"),
+            InlineKeyboardButton(text="🚚 Доставка", callback_data="open_delivery"),
+        ],
+        [
+            InlineKeyboardButton(text="🌲 О бренде", callback_data="open_about"),
+            InlineKeyboardButton(text="📞 Контакты", callback_data="open_contacts"),
+        ],
+    ]
+    # Кнопка "Админ" — только для админа
+    if user_id == ADMIN_ID:
+        buttons.append([InlineKeyboardButton(text="⚙️ Админ-панель", callback_data="admin_back")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def compact_questions_keyboard(items: dict, prefix: str):
-    """Строит клавиатуру с вопросами. По 2-3 в ряд."""
+    """Компактная клавиатура вопросов (по 2 в ряд)."""
     buttons = []
     row = []
     for key, item in items.items():
@@ -280,15 +252,22 @@ def compact_questions_keyboard(items: dict, prefix: str):
             row = []
     if row:
         buttons.append(row)
-    # Кнопка "Назад" — удаляет инфо-сообщение
     buttons.append([InlineKeyboardButton(text="❌ Закрыть", callback_data="close_info")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def info_keyboard():
+    """Клавиатура для информационных разделов (Доставка, О бренде)."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Закрыть", callback_data="close_info")]
+        ]
+    )
 
 
 # ===================== ОТПРАВКА =====================
 
 async def delete_info(user_id: int):
-    """Удаляет инфо-сообщение, если оно есть."""
     old = info_message_ids.pop(user_id, None)
     if old:
         try:
@@ -297,31 +276,12 @@ async def delete_info(user_id: int):
             pass
 
 
-async def send_main_menu(message_or_callback, user_id: int, edit: bool = False):
-    """Отправляет главное меню. Сохраняет ID."""
+async def send_main_menu(message_or_callback, user_id: int):
+    """Отправляет главное меню."""
     text = get_text("welcome")
     photo = get_photo(PHOTO_MAIN_MENU)
+    keyboard = main_menu_keyboard(user_id)
 
-    try:
-        if edit and isinstance(message_or_callback, CallbackQuery):
-            # Редактировать текущее сообщение
-            if photo:
-                await message_or_callback.message.edit_caption(
-                    caption=text,
-                    parse_mode="Markdown",
-                    reply_markup=main_menu_keyboard()
-                )
-            else:
-                await message_or_callback.message.edit_text(
-                    text,
-                    parse_mode="Markdown",
-                    reply_markup=main_menu_keyboard()
-                )
-            return message_or_callback.message.message_id
-    except Exception as e:
-        log.warning(f"Не удалось отредактировать главное меню: {e}")
-
-    # Отправить новое
     try:
         if photo:
             msg = await bot.send_photo(
@@ -329,14 +289,14 @@ async def send_main_menu(message_or_callback, user_id: int, edit: bool = False):
                 photo,
                 caption=text,
                 parse_mode="Markdown",
-                reply_markup=main_menu_keyboard()
+                reply_markup=keyboard
             )
         else:
             msg = await bot.send_message(
                 user_id,
                 text,
                 parse_mode="Markdown",
-                reply_markup=main_menu_keyboard()
+                reply_markup=keyboard
             )
         menu_message_ids[user_id] = msg.message_id
         return msg.message_id
@@ -346,7 +306,7 @@ async def send_main_menu(message_or_callback, user_id: int, edit: bool = False):
 
 
 async def send_info(user_id: int, text: str, keyboard):
-    """Отправляет или обновляет инфо-сообщение ПОД главным меню."""
+    """Отправляет/обновляет инфо-сообщение под главным меню."""
     old = info_message_ids.get(user_id)
     if old:
         try:
@@ -381,22 +341,19 @@ async def send_info(user_id: int, text: str, keyboard):
 @dp.message(Command("start"))
 async def start_command(message: Message):
     user_id = message.from_user.id
-    # Удаляем старое инфо
     await delete_info(user_id)
-    # Удаляем старое меню (если было) — на случай перезапуска
+
     old_menu = menu_message_ids.pop(user_id, None)
     if old_menu:
         try:
             await bot.delete_message(user_id, old_menu)
         except Exception:
             pass
-    # Отправляем главное меню
+
     await send_main_menu(message, user_id)
 
 
-# ===================== ОТКРЫТИЕ РАЗДЕЛОВ =====================
-# Все вызывают send_info — инфо-сообщение меняется под главным меню
-
+# ===================== FAQ (с подменю) =====================
 @dp.callback_query(F.data == "open_faq")
 async def open_faq(callback: CallbackQuery):
     await send_info(
@@ -409,49 +366,6 @@ async def open_faq(callback: CallbackQuery):
     except Exception:
         pass
 
-
-@dp.callback_query(F.data == "open_delivery")
-async def open_delivery(callback: CallbackQuery):
-    await send_info(
-        callback.from_user.id,
-        "🚚 *Доставка и оплата*\n\nВыберите раздел 👇",
-        compact_questions_keyboard(DELIVERY, "del_")
-    )
-    try:
-        await callback.answer()
-    except Exception:
-        pass
-
-
-@dp.callback_query(F.data == "open_about")
-async def open_about(callback: CallbackQuery):
-    await send_info(
-        callback.from_user.id,
-        "🌲 *О бренде MagicHerbs*\n\nВыберите раздел 👇",
-        compact_questions_keyboard(ABOUT, "ab_")
-    )
-    try:
-        await callback.answer()
-    except Exception:
-        pass
-
-
-@dp.callback_query(F.data == "open_contacts")
-async def open_contacts(callback: CallbackQuery):
-    await send_info(
-        callback.from_user.id,
-        "📞 *Контакты*\n\nВыберите раздел 👇",
-        compact_questions_keyboard(CONTACTS, "ct_")
-    )
-    try:
-        await callback.answer()
-    except Exception:
-        pass
-
-
-# ===================== ОТВЕТЫ =====================
-# При клике на вопрос — инфо-сообщение заменяется на ответ
-# Клавиатура — те же вопросы + "Назад"
 
 @dp.callback_query(F.data.startswith("faq_q_"))
 async def faq_answer(callback: CallbackQuery):
@@ -471,17 +385,13 @@ async def faq_answer(callback: CallbackQuery):
         pass
 
 
-@dp.callback_query(F.data.startswith("del_d_"))
-async def delivery_answer(callback: CallbackQuery):
-    key = callback.data.replace("del_", "")
-    item = DELIVERY.get(key)
-    if not item:
-        await callback.answer("Не найдено", show_alert=True)
-        return
+# ===================== ДОСТАВКА (просто текст) =====================
+@dp.callback_query(F.data == "open_delivery")
+async def open_delivery(callback: CallbackQuery):
     await send_info(
         callback.from_user.id,
-        item["answer"],
-        compact_questions_keyboard(DELIVERY, "del_")
+        get_text("delivery"),
+        info_keyboard()
     )
     try:
         await callback.answer()
@@ -489,17 +399,27 @@ async def delivery_answer(callback: CallbackQuery):
         pass
 
 
-@dp.callback_query(F.data.startswith("ab_a_"))
-async def about_answer(callback: CallbackQuery):
-    key = callback.data.replace("ab_", "")
-    item = ABOUT.get(key)
-    if not item:
-        await callback.answer("Не найдено", show_alert=True)
-        return
+# ===================== О БРЕНДЕ (просто текст) =====================
+@dp.callback_query(F.data == "open_about")
+async def open_about(callback: CallbackQuery):
     await send_info(
         callback.from_user.id,
-        item["answer"],
-        compact_questions_keyboard(ABOUT, "ab_")
+        get_text("about"),
+        info_keyboard()
+    )
+    try:
+        await callback.answer()
+    except Exception:
+        pass
+
+
+# ===================== КОНТАКТЫ (с подменю) =====================
+@dp.callback_query(F.data == "open_contacts")
+async def open_contacts(callback: CallbackQuery):
+    await send_info(
+        callback.from_user.id,
+        "📞 *Контакты*\n\nВыберите раздел 👇",
+        compact_questions_keyboard(CONTACTS, "ct_")
     )
     try:
         await callback.answer()
@@ -528,7 +448,6 @@ async def contacts_answer(callback: CallbackQuery):
 # ===================== ЗАКРЫТИЕ ИНФО =====================
 @dp.callback_query(F.data == "close_info")
 async def close_info(callback: CallbackQuery):
-    """Удаляет инфо-сообщение. Главное меню остаётся."""
     await delete_info(callback.from_user.id)
     try:
         await callback.answer()
@@ -944,6 +863,8 @@ async def admin_edit_texts(callback: CallbackQuery):
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="🌿 Приветствие", callback_data="admin_edit_welcome")],
+            [InlineKeyboardButton(text="🚚 Доставка", callback_data="admin_edit_delivery")],
+            [InlineKeyboardButton(text="🌲 О бренде", callback_data="admin_edit_about")],
             [InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_back")],
         ]
     )
@@ -955,16 +876,25 @@ async def admin_edit_texts(callback: CallbackQuery):
     await callback.answer()
 
 
-@dp.callback_query(F.data == "admin_edit_welcome")
-async def admin_edit_welcome(callback: CallbackQuery):
+@dp.callback_query(F.data.startswith("admin_edit_") & ~F.data.in_({"admin_edit_texts"}))
+async def admin_edit_choice(callback: CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
         await callback.answer("Нет доступа", show_alert=True)
         return
-    editing_state[callback.from_user.id] = "welcome"
-    current = get_text("welcome")
+    key = callback.data.replace("admin_edit_", "")
+    if key not in DEFAULT_TEXTS:
+        await callback.answer("Раздел не найден", show_alert=True)
+        return
+    names = {
+        "welcome": "Приветствие",
+        "delivery": "Доставка",
+        "about": "О бренде",
+    }
+    editing_state[callback.from_user.id] = key
+    current = get_text(key)
     preview = current[:500] + ("..." if len(current) > 500 else "")
     await callback.message.edit_text(
-        f"✏️ *Редактирование: Приветствие*\n\n"
+        f"✏️ *Редактирование: {names.get(key, key)}*\n\n"
         f"*Текущий:*\n{preview}\n\n"
         f"Отправьте новый текст одним сообщением.",
         parse_mode="Markdown",
@@ -982,7 +912,7 @@ async def admin_cancel_edit(callback: CallbackQuery):
     await callback.message.edit_text(
         "✏️ Отменено.",
         reply_markup=InlineKeyboardMarkup(
-            inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_back")]]
+            inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_edit_texts")]]
         )
     )
 
@@ -997,8 +927,13 @@ async def handle_text_edit(message: Message):
     TEXTS[key] = message.text
     save_json(TEXTS_FILE, TEXTS)
     editing_state.pop(message.from_user.id, None)
+    names = {
+        "welcome": "Приветствие",
+        "delivery": "Доставка",
+        "about": "О бренде",
+    }
     await message.answer(
-        "✅ *Текст обновлён!*",
+        f"✅ *Текст «{names.get(key, key)}» обновлён!*",
         parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup(
             inline_keyboard=[[InlineKeyboardButton(text="⬅️ В админ-панель", callback_data="admin_back")]]
