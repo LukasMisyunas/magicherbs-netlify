@@ -21,6 +21,7 @@ from aiogram.filters import Command
 from aiogram import F
 from pathlib import Path
 
+# ===================== ПУТИ =====================
 PHOTOS_DIR = Path(__file__).parent / "Photos"
 PHOTO_MAIN_MENU = "main_menu.jpg"
 PHOTO_FAQ = "faq.jpg"
@@ -30,6 +31,17 @@ PHOTO_CONTACTS = "contacts.jpg"
 PHOTO_CATALOG = "catalog.jpg"
 
 TEXTS_FILE = Path(__file__).parent / "texts.json"
+FAQ_FILE = Path(__file__).parent / "faq.json"
+DELIVERY_FILE = Path(__file__).parent / "delivery.json"
+ABOUT_FILE = Path(__file__).parent / "about.json"
+CONTACTS_FILE = Path(__file__).parent / "contacts.json"
+
+# ===================== ЛОГГЕР =====================
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+log = logging.getLogger("bot")
 
 
 def get_photo(filename: str):
@@ -50,142 +62,219 @@ DEFAULT_TEXTS = {
         "✨ Создано природой — проверено наукой\n\n"
         "Выберите интересующий раздел 👇"
     ),
-    "faq": (
+    "faq_intro": (
         "❓ *Часто задаваемые вопросы*\n\n"
-        "┌─────────────────────────┐\n"
-        "│ *🌿 Товар натуральный?* │\n"
-        "└─────────────────────────┘\n"
-        "Да! Мы используем только дикорастущее сырьё Сибири и Алтая.\n"
-        "✅ Никакого искусственно выращенного или китайского сырья\n"
-        "✅ Только стеклянная тара, без пластика\n\n"
-        "┌─────────────────────────┐\n"
-        "│ *✨ В чём уникальность?* │\n"
-        "└─────────────────────────┘\n"
-        "Уникальная вакуумная низкотемпературная технология экстракции:\n"
-        "🔬 Сохраняет полезные вещества растений\n"
-        "🚫 Без выпаривания в «кастрюлях»\n"
-        "🚫 Без вредных реагентов и консервантов\n"
-        "📊 Эффективность экстракции — до 99%\n\n"
-        "┌─────────────────────────┐\n"
-        "│ *📜 Есть сертификаты?*  │\n"
-        "└─────────────────────────┘\n"
-        "Да, качество контролируется на всех этапах.\n"
-        "🔍 Сертификаты — на сайте, раздел «Протоколы».\n\n"
-        "┌─────────────────────────────┐\n"
-        "│ *🏪 На маркетплейсах есть?* │\n"
-        "└─────────────────────────────┘\n"
-        "Нет! Мы принципиально не продаём продукцию:\n"
-        "❌ На маркетплейсах\n"
-        "❌ В массмаркетах\n"
-        "💎 Только эксклюзивное качество и ограниченные объёмы\n\n"
-        "┌─────────────────────────────┐\n"
-        "│ *📦 Как отследить заказ?*  │\n"
-        "└─────────────────────────────┘\n"
-        "Трек-номер придёт на e-mail, указанный при оформлении.\n\n"
-        "❓ Не нашли ответ? Напишите нам — кнопка «Контакты» ниже."
+        "Выберите интересующий вопрос 👇"
     ),
-    "delivery": (
+    "delivery_intro": (
         "🚚 *Доставка и оплата*\n\n"
-        "┌─────────────────────────────┐\n"
-        "│   📦 *Способы доставки*     │\n"
-        "└─────────────────────────────┘\n"
-        "▸ 🚚 Стандартная — *бесплатно*, 3–5 рабочих дней\n"
-        "▸ ✈️ Экспресс — *500 ₽*, 1–2 рабочих дня\n"
-        "▸ 🎁 На заказы от *10 000 ₽* — скидка и бесплатная доставка\n\n"
-        "┌─────────────────────────────┐\n"
-        "│   💳 *Способы оплаты*       │\n"
-        "└─────────────────────────────┘\n"
-        "▸ 💳 OzonPay\n"
-        "▸ 💳 CloudPayments (Visa/Mastercard/МИР)\n"
-        "▸ 💳 Robokassa (СБП, карты, эл. кошельки)\n"
-        "▸ 💳 ЮKassa (карта, ЮMoney, SberPay)\n\n"
-        "📱 *Подробности* — на сайте, раздел «Доставка и оплата»"
+        "Выберите раздел 👇"
     ),
-    "about": (
-        "🌲 *О MagicHerbs*\n\n"
-        "┌─────────────────────────────┐\n"
-        "│   ✨ Наша история           │\n"
-        "└─────────────────────────────┘\n"
-        "MagicHerbs — семейный бренд, часть научно-производственного комплекса\n"
-        "с более чем *20-летней историей* на рынке.\n\n"
-        "┌─────────────────────────────┐\n"
-        "│   🌿 Наше сырьё             │\n"
-        "└─────────────────────────────┘\n"
-        "▸ Только дикорастущие травы и растения\n"
-        "▸ Собираем в экологических заповедниках Сибири\n"
-        "▸ От Горного Алтая до севера Томской области\n"
-        "▸ Производство — прямо в месте произрастания сырья\n"
-        "▸ Сохраняем высокую концентрацию полезных веществ\n\n"
-        "┌─────────────────────────────┐\n"
-        "│   🎯 Наша миссия            │\n"
-        "└─────────────────────────────┘\n"
-        "Сохранить человечество в здоровом, не видоизменённом виде:\n"
-        "🌱 Натуральные концентраты из дикорастущего сырья\n"
-        "❌ Вместо синтетических препаратов\n\n"
-        "ℹ️ Подробнее — в разделах «О нас» и «Миссия» на mherbs.ru"
+    "about_intro": (
+        "🌲 *О бренде MagicHerbs*\n\n"
+        "Выберите раздел 👇"
     ),
-    "contacts": (
+    "contacts_intro": (
         "📞 *Контакты*\n\n"
-        "┌─────────────────────────────┐\n"
-        "│   📍 Адрес                  │\n"
-        "└─────────────────────────────┘\n"
-        "г. Томск\n\n"
-        "┌─────────────────────────────┐\n"
-        "│   📱 Телефон                │\n"
-        "└─────────────────────────────┘\n"
-        "☎️ +7 900 922 4496\n\n"
-        "┌─────────────────────────────┐\n"
-        "│   ✉️ Email                  │\n"
-        "└─────────────────────────────┘\n"
-        "magicherbs4you@yandex.ru\n\n"
-        "┌─────────────────────────────┐\n"
-        "│   🌐 Социальные сети        │\n"
-        "└─────────────────────────────┘\n"
-        "▸ VK: vk.com/mherbs\n"
-        "▸ Telegram: t.me/yegorogurtsov\n"
-        "▸ WhatsApp: wa.me/79009224496\n\n"
-        "┌─────────────────────────────┐\n"
-        "│   💻 Сайт                   │\n"
-        "└─────────────────────────────┘\n"
-        "mherbs.ru"
+        "Выберите раздел 👇"
     ),
 }
 
 
-def load_texts():
-    """Загружает тексты из файла или создаёт с дефолтными."""
-    if TEXTS_FILE.exists():
+# ===================== FAQ =====================
+DEFAULT_FAQ = {
+    "q_natural": {
+        "title": "🌿 Товар натуральный?",
+        "answer": (
+            "🌿 *Товар натуральный?*\n\n"
+            "Да! Мы используем только дикорастущее сырьё Сибири и Алтая.\n\n"
+            "✅ Никакого искусственно выращенного или китайского сырья\n"
+            "✅ Только стеклянная тара, без пластика"
+        ),
+    },
+    "q_unique": {
+        "title": "✨ В чём уникальность?",
+        "answer": (
+            "✨ *В чём уникальность?*\n\n"
+            "Уникальная вакуумная низкотемпературная технология экстракции:\n\n"
+            "🔬 Сохраняет полезные вещества растений\n"
+            "🚫 Без выпаривания в «кастрюлях»\n"
+            "🚫 Без вредных реагентов и консервантов\n"
+            "📊 Эффективность экстракции — до 99%"
+        ),
+    },
+    "q_certs": {
+        "title": "📜 Есть сертификаты?",
+        "answer": (
+            "📜 *Есть сертификаты?*\n\n"
+            "Да, качество контролируется на всех этапах.\n\n"
+            "🔍 Сертификаты — на сайте, раздел «Протоколы»."
+        ),
+    },
+    "q_marketplaces": {
+        "title": "🏪 На маркетплейсах есть?",
+        "answer": (
+            "🏪 *На маркетплейсах есть?*\n\n"
+            "Нет! Мы принципиально не продаём продукцию:\n\n"
+            "❌ На маркетплейсах\n"
+            "❌ В массмаркетах\n\n"
+            "💎 Только эксклюзивное качество и ограниченные объёмы"
+        ),
+    },
+    "q_tracking": {
+        "title": "📦 Как отследить заказ?",
+        "answer": (
+            "📦 *Как отследить заказ?*\n\n"
+            "Трек-номер придёт на e-mail, указанный при оформлении."
+        ),
+    },
+}
+
+
+# ===================== ДОСТАВКА =====================
+DEFAULT_DELIVERY = {
+    "d_shipping": {
+        "title": "📦 Способы доставки",
+        "answer": (
+            "📦 *Способы доставки*\n\n"
+            "🚚 *Стандартная* — бесплатно\n"
+            "Срок: 3–5 рабочих дней\n\n"
+            "✈️ *Экспресс* — 500 ₽\n"
+            "Срок: 1–2 рабочих дня\n\n"
+            "🎁 *Бонус:* на заказы от 10 000 ₽ — скидка и бесплатная доставка"
+        ),
+    },
+    "d_payment": {
+        "title": "💳 Способы оплаты",
+        "answer": (
+            "💳 *Способы оплаты*\n\n"
+            "▸ 💳 OzonPay\n"
+            "▸ 💳 CloudPayments — Visa, Mastercard, МИР\n"
+            "▸ 💳 Robokassa — СБП, карты, электронные кошельки\n"
+            "▸ 💳 ЮKassa — карта, ЮMoney, SberPay\n\n"
+            "📱 Подробнее — на сайте, раздел «Доставка и оплата»"
+        ),
+    },
+}
+
+
+# ===================== О БРЕНДЕ =====================
+DEFAULT_ABOUT = {
+    "a_history": {
+        "title": "✨ Наша история",
+        "answer": (
+            "✨ *Наша история*\n\n"
+            "MagicHerbs — семейный бренд, часть научно-производственного комплекса "
+            "с более чем *20-летней историей* на рынке."
+        ),
+    },
+    "a_raw": {
+        "title": "🌿 Наше сырьё",
+        "answer": (
+            "🌿 *Наше сырьё*\n\n"
+            "▸ Только дикорастущие травы и растения\n"
+            "▸ Собираем в экологических заповедниках Сибири\n"
+            "▸ От Горного Алтая до севера Томской области\n"
+            "▸ Производство — прямо в месте произрастания сырья\n"
+            "▸ Сохраняем высокую концентрацию полезных веществ"
+        ),
+    },
+    "a_mission": {
+        "title": "🎯 Наша миссия",
+        "answer": (
+            "🎯 *Наша миссия*\n\n"
+            "Сохранить человечество в здоровом, не видоизменённом виде:\n\n"
+            "🌱 Натуральные концентраты из дикорастущего сырья\n"
+            "❌ Вместо синтетических препаратов\n\n"
+            "ℹ️ Подробнее — в разделах «О нас» и «Миссия» на mherbs.ru"
+        ),
+    },
+}
+
+
+# ===================== КОНТАКТЫ =====================
+DEFAULT_CONTACTS = {
+    "c_phone": {
+        "title": "📱 Телефон и email",
+        "answer": (
+            "📱 *Телефон и email*\n\n"
+            "☎️ +7 900 922 4496\n"
+            "✉️ magicherbs4you@yandex.ru"
+        ),
+    },
+    "c_social": {
+        "title": "🌐 Социальные сети",
+        "answer": (
+            "🌐 *Социальные сети*\n\n"
+            "▸ VK: vk.com/mherbs\n"
+            "▸ Telegram: t.me/yegorogurtsov\n"
+            "▸ WhatsApp: wa.me/79009224496"
+        ),
+    },
+    "c_address": {
+        "title": "📍 Адрес",
+        "answer": (
+            "📍 *Адрес*\n\n"
+            "г. Томск\n\n"
+            "💻 Сайт: mherbs.ru"
+        ),
+    },
+}
+
+
+# ===================== ЗАГРУЗКА / СОХРАНЕНИЕ =====================
+def load_json(path, default):
+    if path.exists():
         try:
-            with open(TEXTS_FILE, "r", encoding="utf-8") as f:
+            with open(path, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception as e:
-            log.error(f"Ошибка загрузки texts.json: {e}")
-            return DEFAULT_TEXTS.copy()
+            log.error(f"Ошибка загрузки {path.name}: {e}")
+            return default.copy()
     else:
-        save_texts(DEFAULT_TEXTS)
-        return DEFAULT_TEXTS.copy()
+        save_json(path, default)
+        return default.copy()
 
 
-def save_texts(texts):
-    """Сохраняет тексты в файл."""
+def save_json(path, data):
     try:
-        with open(TEXTS_FILE, "w", encoding="utf-8") as f:
-            json.dump(texts, f, ensure_ascii=False, indent=2)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
     except Exception as e:
-        log.error(f"Ошибка сохранения texts.json: {e}")
+        log.error(f"Ошибка сохранения {path.name}: {e}")
 
 
-# Глобальный объект с текстами
-TEXTS = load_texts()
+TEXTS = load_json(TEXTS_FILE, DEFAULT_TEXTS)
+FAQ = load_json(FAQ_FILE, DEFAULT_FAQ)
+DELIVERY = load_json(DELIVERY_FILE, DEFAULT_DELIVERY)
+ABOUT = load_json(ABOUT_FILE, DEFAULT_ABOUT)
+CONTACTS = load_json(CONTACTS_FILE, DEFAULT_CONTACTS)
 
 
 def get_text(key):
-    """Получает текст по ключу."""
     return TEXTS.get(key, DEFAULT_TEXTS.get(key, ""))
 
 
-# ===================== КЛАВИАТУРЫ =====================
+# ===================== ENV =====================
+BOT_TOKEN = os.environ["BOT_TOKEN"]
+ADMIN_ID = int(os.environ["ADMIN_ID"])
 
+YOOKASSA_SHOP_ID = os.environ.get("YOOKASSA_SHOP_ID", "")
+YOOKASSA_SECRET_KEY = os.environ.get("YOOKASSA_SECRET_KEY", "")
+
+WEBAPP_URL = os.environ.get("WEBAPP_URL", "https://magicherbsss.netlify.app/")
+ORDER_SHARED_SECRET = os.environ["ORDER_SHARED_SECRET"]
+PORT = int(os.environ.get("PORT", 8080))
+
+bot = Bot(token=BOT_TOKEN, request_timeout=120)
+dp = Dispatcher()
+orders_db = {}
+BOT_USERNAME = None
+
+editing_state = {}
+
+
+# ===================== КЛАВИАТУРЫ =====================
 def main_menu_keyboard():
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -207,55 +296,28 @@ def main_menu_keyboard():
     )
 
 
-def back_keyboard():
+def submenu_keyboard(items: dict, prefix: str, back_to: str = "menu_back"):
+    buttons = []
+    for key, item in items.items():
+        buttons.append([
+            InlineKeyboardButton(text=item["title"], callback_data=f"{prefix}{key}")
+        ])
+    buttons.append([
+        InlineKeyboardButton(text="⬅️ Назад", callback_data=back_to)
+    ])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def answer_keyboard(back_to: str):
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="⬅️ Назад в меню", callback_data="menu_back")]
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data=back_to)]
         ]
     )
 
 
-def contacts_keyboard():
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="💬 Написать в WhatsApp", url="https://wa.me/79009224496")],
-            [InlineKeyboardButton(text="🌐 Перейти на сайт", url="https://mherbs.ru")],
-            [InlineKeyboardButton(text="⬅️ Назад в меню", callback_data="menu_back")],
-        ]
-    )
-
-
-BOT_TOKEN = os.environ["BOT_TOKEN"]
-ADMIN_ID = int(os.environ["ADMIN_ID"])
-
-YOOKASSA_SHOP_ID = os.environ.get("YOOKASSA_SHOP_ID", "")
-YOOKASSA_SECRET_KEY = os.environ.get("YOOKASSA_SECRET_KEY", "")
-
-WEBAPP_URL = os.environ.get("WEBAPP_URL", "https://magicherbsss.netlify.app/")
-ORDER_SHARED_SECRET = os.environ["ORDER_SHARED_SECRET"]
-PORT = int(os.environ.get("PORT", 8080))
-
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-log = logging.getLogger("bot")
-
-bot = Bot(token=BOT_TOKEN, request_timeout=120)
-dp = Dispatcher()
-orders_db = {}
-BOT_USERNAME = None
-
-# Состояния для редактирования текстов
-editing_state = {}
-
-
-async def show_menu_section(
-    callback: CallbackQuery,
-    text: str,
-    photo_filename: str,
-    keyboard: InlineKeyboardMarkup
-):
+# ===================== ОТПРАВКА =====================
+async def safe_send(callback: CallbackQuery, text: str, photo_filename: str, keyboard):
     try:
         if callback.message:
             await callback.message.delete()
@@ -267,20 +329,10 @@ async def show_menu_section(
 
     try:
         if photo and len(text) <= MAX_CAPTION_LEN:
-            # Короткий текст — с фото
             await bot.send_photo(
                 callback.from_user.id,
                 photo,
                 caption=text,
-                parse_mode="Markdown",
-                reply_markup=keyboard
-            )
-        elif photo:
-            # Длинный текст — фото отдельно, текст отдельно
-            await bot.send_photo(callback.from_user.id, photo)
-            await bot.send_message(
-                callback.from_user.id,
-                text,
                 parse_mode="Markdown",
                 reply_markup=keyboard
             )
@@ -292,13 +344,195 @@ async def show_menu_section(
                 reply_markup=keyboard
             )
     except Exception as e:
-        log.error(f"Ошибка отправки меню: {e}")
+        log.error(f"Ошибка отправки: {e}")
+        try:
+            await bot.send_message(
+                callback.from_user.id,
+                text,
+                reply_markup=keyboard
+            )
+        except Exception as e2:
+            log.error(f"Повторная ошибка: {e2}")
 
+
+async def safe_edit(callback: CallbackQuery, text: str, keyboard):
+    try:
+        await callback.message.edit_text(
+            text,
+            parse_mode="Markdown",
+            reply_markup=keyboard
+        )
+    except Exception as e:
+        log.warning(f"Не удалось отредактировать: {e}")
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass
+        try:
+            await bot.send_message(
+                callback.from_user.id,
+                text,
+                parse_mode="Markdown",
+                reply_markup=keyboard
+            )
+        except Exception as e2:
+            log.error(f"Не удалось отправить: {e2}")
+
+
+# ===================== /start =====================
+@dp.message(Command("start"))
+async def start_command(message: Message):
+    try:
+        photo = get_photo(PHOTO_MAIN_MENU)
+        if photo:
+            await message.answer_photo(
+                photo,
+                caption=get_text("welcome"),
+                parse_mode="Markdown",
+                reply_markup=main_menu_keyboard()
+            )
+        else:
+            await message.answer(
+                get_text("welcome"),
+                parse_mode="Markdown",
+                reply_markup=main_menu_keyboard()
+            )
+    except Exception as e:
+        log.exception(f"Ошибка в /start: {e}")
+
+
+# ===================== FAQ =====================
+@dp.callback_query(F.data == "menu_faq")
+async def menu_faq_handler(callback: CallbackQuery):
+    await safe_send(
+        callback,
+        get_text("faq_intro"),
+        PHOTO_FAQ,
+        submenu_keyboard(FAQ, "faq_", "menu_back")
+    )
     try:
         await callback.answer()
     except Exception:
         pass
 
+
+@dp.callback_query(F.data.startswith("faq_q_"))
+async def faq_answer_handler(callback: CallbackQuery):
+    key = callback.data.replace("faq_", "")
+    item = FAQ.get(key)
+    if not item:
+        await callback.answer("Не найдено", show_alert=True)
+        return
+    await safe_edit(callback, item["answer"], answer_keyboard("menu_faq"))
+    try:
+        await callback.answer()
+    except Exception:
+        pass
+
+
+# ===================== ДОСТАВКА =====================
+@dp.callback_query(F.data == "menu_delivery")
+async def menu_delivery_handler(callback: CallbackQuery):
+    await safe_send(
+        callback,
+        get_text("delivery_intro"),
+        PHOTO_DELIVERY,
+        submenu_keyboard(DELIVERY, "del_", "menu_back")
+    )
+    try:
+        await callback.answer()
+    except Exception:
+        pass
+
+
+@dp.callback_query(F.data.startswith("del_d_"))
+async def delivery_answer_handler(callback: CallbackQuery):
+    key = callback.data.replace("del_", "")
+    item = DELIVERY.get(key)
+    if not item:
+        await callback.answer("Не найдено", show_alert=True)
+        return
+    await safe_edit(callback, item["answer"], answer_keyboard("menu_delivery"))
+    try:
+        await callback.answer()
+    except Exception:
+        pass
+
+
+# ===================== О БРЕНДЕ =====================
+@dp.callback_query(F.data == "menu_about")
+async def menu_about_handler(callback: CallbackQuery):
+    await safe_send(
+        callback,
+        get_text("about_intro"),
+        PHOTO_ABOUT,
+        submenu_keyboard(ABOUT, "ab_", "menu_back")
+    )
+    try:
+        await callback.answer()
+    except Exception:
+        pass
+
+
+@dp.callback_query(F.data.startswith("ab_a_"))
+async def about_answer_handler(callback: CallbackQuery):
+    key = callback.data.replace("ab_", "")
+    item = ABOUT.get(key)
+    if not item:
+        await callback.answer("Не найдено", show_alert=True)
+        return
+    await safe_edit(callback, item["answer"], answer_keyboard("menu_about"))
+    try:
+        await callback.answer()
+    except Exception:
+        pass
+
+
+# ===================== КОНТАКТЫ =====================
+@dp.callback_query(F.data == "menu_contacts")
+async def menu_contacts_handler(callback: CallbackQuery):
+    await safe_send(
+        callback,
+        get_text("contacts_intro"),
+        PHOTO_CONTACTS,
+        submenu_keyboard(CONTACTS, "ct_", "menu_back")
+    )
+    try:
+        await callback.answer()
+    except Exception:
+        pass
+
+
+@dp.callback_query(F.data.startswith("ct_c_"))
+async def contacts_answer_handler(callback: CallbackQuery):
+    key = callback.data.replace("ct_", "")
+    item = CONTACTS.get(key)
+    if not item:
+        await callback.answer("Не найдено", show_alert=True)
+        return
+    await safe_edit(callback, item["answer"], answer_keyboard("menu_contacts"))
+    try:
+        await callback.answer()
+    except Exception:
+        pass
+
+
+# ===================== НАЗАД =====================
+@dp.callback_query(F.data == "menu_back")
+async def menu_back_handler(callback: CallbackQuery):
+    await safe_send(
+        callback,
+        get_text("welcome"),
+        PHOTO_MAIN_MENU,
+        main_menu_keyboard()
+    )
+    try:
+        await callback.answer()
+    except Exception:
+        pass
+
+
+# ===================== ЗАКАЗЫ / ЮKASSA =====================
 def esc_md(text: str) -> str:
     for ch in ("\\", "_", "*", "`", "["):
         text = text.replace(ch, "\\" + ch)
@@ -560,53 +794,7 @@ async def handle_yookassa_webhook(request: web.Request):
     return web.json_response({"ok": True})
 
 
-# ===================== ОСНОВНЫЕ КОМАНДЫ =====================
-
-@dp.message(Command("start"))
-async def start_command(message: Message):
-    try:
-        photo = get_photo(PHOTO_MAIN_MENU)
-        if photo:
-            await message.answer_photo(
-                photo,
-                caption=get_text("welcome"),
-                parse_mode="Markdown",
-                reply_markup=main_menu_keyboard()
-            )
-        else:
-            await message.answer(
-                get_text("welcome"),
-                parse_mode="Markdown",
-                reply_markup=main_menu_keyboard()
-            )
-    except Exception as e:
-        log.exception(f"Ошибка в /start: {e}")
-
-
-@dp.callback_query(F.data == "menu_faq")
-async def menu_faq_handler(callback: CallbackQuery):
-    await show_menu_section(callback, get_text("faq"), PHOTO_FAQ, back_keyboard())
-
-@dp.callback_query(F.data == "menu_delivery")
-async def menu_delivery_handler(callback: CallbackQuery):
-    await show_menu_section(callback, get_text("delivery"), PHOTO_DELIVERY, back_keyboard())
-
-@dp.callback_query(F.data == "menu_about")
-async def menu_about_handler(callback: CallbackQuery):
-    await show_menu_section(callback, get_text("about"), PHOTO_ABOUT, back_keyboard())
-
-@dp.callback_query(F.data == "menu_contacts")
-async def menu_contacts_handler(callback: CallbackQuery):
-    await show_menu_section(callback, get_text("contacts"), PHOTO_CONTACTS, contacts_keyboard())
-
-
-@dp.callback_query(F.data == "menu_back")
-async def menu_back_handler(callback: CallbackQuery):
-    await show_menu_section(callback, get_text("welcome"), PHOTO_MAIN_MENU, main_menu_keyboard())
-
-
 # ===================== АДМИН-ПАНЕЛЬ =====================
-
 @dp.message(Command("admin"))
 async def cmd_admin(message: Message):
     if message.from_user.id != ADMIN_ID:
@@ -841,7 +1029,6 @@ async def admin_products_hint(callback: CallbackQuery):
 
 
 # ===================== РЕДАКТИРОВАНИЕ ТЕКСТОВ =====================
-
 @dp.callback_query(F.data == "admin_edit_texts")
 async def admin_edit_texts(callback: CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
@@ -851,10 +1038,10 @@ async def admin_edit_texts(callback: CallbackQuery):
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="🌿 Приветствие", callback_data="admin_edit_welcome")],
-            [InlineKeyboardButton(text="❓ FAQ", callback_data="admin_edit_faq")],
-            [InlineKeyboardButton(text="🚚 Доставка", callback_data="admin_edit_delivery")],
-            [InlineKeyboardButton(text="🌲 О бренде", callback_data="admin_edit_about")],
-            [InlineKeyboardButton(text="📞 Контакты", callback_data="admin_edit_contacts")],
+            [InlineKeyboardButton(text="❓ FAQ (интро)", callback_data="admin_edit_faq_intro")],
+            [InlineKeyboardButton(text="🚚 Доставка (интро)", callback_data="admin_edit_delivery_intro")],
+            [InlineKeyboardButton(text="🌲 О бренде (интро)", callback_data="admin_edit_about_intro")],
+            [InlineKeyboardButton(text="📞 Контакты (интро)", callback_data="admin_edit_contacts_intro")],
             [InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_back")],
         ]
     )
@@ -882,10 +1069,10 @@ async def admin_edit_choice(callback: CallbackQuery):
 
     names = {
         "welcome": "Приветствие",
-        "faq": "FAQ",
-        "delivery": "Доставка",
-        "about": "О бренде",
-        "contacts": "Контакты"
+        "faq_intro": "FAQ (интро)",
+        "delivery_intro": "Доставка (интро)",
+        "about_intro": "О бренде (интро)",
+        "contacts_intro": "Контакты (интро)",
     }
 
     editing_state[callback.from_user.id] = key
@@ -930,20 +1117,19 @@ async def handle_text_edit(message: Message):
 
     new_text = message.text
     TEXTS[key] = new_text
-    save_texts(TEXTS)
+    save_json(TEXTS_FILE, TEXTS)
     editing_state.pop(message.from_user.id, None)
 
     names = {
         "welcome": "Приветствие",
-        "faq": "FAQ",
-        "delivery": "Доставка",
-        "about": "О бренде",
-        "contacts": "Контакты"
+        "faq_intro": "FAQ (интро)",
+        "delivery_intro": "Доставка (интро)",
+        "about_intro": "О бренде (интро)",
+        "contacts_intro": "Контакты (интро)",
     }
 
     await message.answer(
-        f"✅ *Текст «{names.get(key, key)}» обновлён!*\n\n"
-        f"Новый текст сохранён. Бот будет показывать его.",
+        f"✅ *Текст «{names.get(key, key)}» обновлён!*",
         parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup(
             inline_keyboard=[
@@ -992,6 +1178,7 @@ async def admin_close(callback: CallbackQuery):
     await callback.answer()
 
 
+# ===================== WEB СЕРВЕР =====================
 async def start_web_server():
     app = web.Application(middlewares=[cors_middleware])
     app.router.add_post("/webhook/order", handle_order)
@@ -1007,6 +1194,7 @@ async def start_web_server():
     log.info(f"🌐 HTTP сервер запущен на порту {PORT}")
 
 
+# ===================== MAIN =====================
 async def main():
     global BOT_USERNAME
 
