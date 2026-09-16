@@ -23,15 +23,25 @@ from pathlib import Path
 
 # ===================== ПУТИ =====================
 PHOTOS_DIR = Path(__file__).parent / "Photos"
-PHOTO_MAIN_MENU = "main_menu.jpg"
-PHOTO_FAQ = "faq.jpg"
-PHOTO_DELIVERY = "delivery.jpg"
-PHOTO_ABOUT = "about.jpg"
-PHOTO_CONTACTS = "contacts.jpg"
+PHOTOS_DIR.mkdir(exist_ok=True)
 
-TEXTS_FILE = Path(__file__).parent / "texts.json"
-FAQ_FILE = Path(__file__).parent / "faq.json"
-CONTACTS_FILE = Path(__file__).parent / "contacts.json"
+DATA_DIR = Path(__file__).parent / "data"
+DATA_DIR.mkdir(exist_ok=True)
+
+# Файлы данных
+TEXTS_FILE = DATA_DIR / "texts.json"
+FAQ_FILE = DATA_DIR / "faq.json"
+CONTACTS_FILE = DATA_DIR / "contacts.json"
+PHOTOS_FILE = DATA_DIR / "photos.json"  # пути к фото разделов
+
+# Стандартные имена фото (можно менять через админку)
+DEFAULT_PHOTOS = {
+    "main_menu": "main_menu.jpg",
+    "faq": "faq.jpg",
+    "delivery": "delivery.jpg",
+    "about": "about.jpg",
+    "contacts": "contacts.jpg",
+}
 
 logging.basicConfig(
     level=logging.INFO,
@@ -40,7 +50,12 @@ logging.basicConfig(
 log = logging.getLogger("bot")
 
 
+# ===================== ФОТО =====================
+PHOTOS = {}  # загружается ниже
+
 def get_photo(filename: str):
+    if not filename:
+        return None
     try:
         path = PHOTOS_DIR / filename
         if path.exists():
@@ -81,14 +96,15 @@ DEFAULT_TEXTS = {
         "▸ Только дикорастущие травы и растения\n"
         "▸ Собираем в экологических заповедниках Сибири\n"
         "▸ От Горного Алтая до севера Томской области\n"
-        "▸ Производство — прямо в месте произрастания сырья\n"
-        "▸ Сохраняем высокую концентрацию полезных веществ\n\n"
+        "▸ Производство — прямо в месте произрастания сырья\n\n"
         "🎯 *Наша миссия*\n"
         "Сохранить человечество в здоровом, не видоизменённом виде:\n"
         "🌱 Натуральные концентраты из дикорастущего сырья\n"
         "❌ Вместо синтетических препаратов\n\n"
         "ℹ️ Подробнее — на mherbs.ru"
     ),
+    "faq_intro": "❓ *Часто задаваемые вопросы*\n\nВыберите вопрос 👇",
+    "contacts_intro": "📞 *Контакты*\n\nВыберите раздел 👇",
 }
 
 # ===================== FAQ =====================
@@ -170,7 +186,7 @@ DEFAULT_CONTACTS = {
 }
 
 
-# ===================== ЗАГРУЗКА =====================
+# ===================== ЗАГРУЗКА / СОХРАНЕНИЕ =====================
 def load_json(path, default):
     if path.exists():
         try:
@@ -195,10 +211,15 @@ def save_json(path, data):
 TEXTS = load_json(TEXTS_FILE, DEFAULT_TEXTS)
 FAQ = load_json(FAQ_FILE, DEFAULT_FAQ)
 CONTACTS = load_json(CONTACTS_FILE, DEFAULT_CONTACTS)
+PHOTOS = load_json(PHOTOS_FILE, DEFAULT_PHOTOS)
 
 
 def get_text(key):
     return TEXTS.get(key, DEFAULT_TEXTS.get(key, ""))
+
+
+def get_photo_name(key):
+    return PHOTOS.get(key, DEFAULT_PHOTOS.get(key, ""))
 
 
 # ===================== ENV =====================
@@ -215,8 +236,11 @@ dp = Dispatcher()
 orders_db = {}
 BOT_USERNAME = None
 
-editing_state = {}
-
+# Состояния
+editing_state = {}       # {user_id: "welcome"/"delivery"/...}
+adding_state = {}        # {user_id: {"type": "faq"/"contacts", "step": "title"/"answer"}}
+editing_item = {}        # {user_id: {"type": "faq"/"contacts", "key": "q_natural", "field": "title"/"answer"}}
+waiting_photo = {}       # {user_id: "faq"/"delivery"/...}
 menu_message_ids = {}
 info_message_ids = {}
 
@@ -235,14 +259,13 @@ def main_menu_keyboard(user_id: int = None):
             InlineKeyboardButton(text="📞 Контакты", callback_data="open_contacts"),
         ],
     ]
-    # Кнопка "Админ" — только для админа
     if user_id == ADMIN_ID:
         buttons.append([InlineKeyboardButton(text="⚙️ Админ-панель", callback_data="admin_back")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def compact_questions_keyboard(items: dict, prefix: str):
-    """Компактная клавиатура вопросов (по 2 в ряд)."""
+def questions_keyboard(items: dict, prefix: str, include_back: bool = False):
+    """Компактные кнопки вопросов по 2 в ряд. + Закрыть (или Назад для FAQ)."""
     buttons = []
     row = []
     for key, item in items.items():
@@ -252,15 +275,20 @@ def compact_questions_keyboard(items: dict, prefix: str):
             row = []
     if row:
         buttons.append(row)
-    buttons.append([InlineKeyboardButton(text="❌ Закрыть", callback_data="close_info")])
+
+    if include_back:
+        # Первая кнопка после вопросов — Назад (удалить всё)
+        buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="close_info")])
+    else:
+        buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="close_info")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def info_keyboard():
-    """Клавиатура для информационных разделов (Доставка, О бренде)."""
+    """Просто кнопка Назад."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="❌ Закрыть", callback_data="close_info")]
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="close_info")]
         ]
     )
 
@@ -276,10 +304,11 @@ async def delete_info(user_id: int):
             pass
 
 
-async def send_main_menu(message_or_callback, user_id: int):
-    """Отправляет главное меню."""
+async def send_main_menu(user_id: int):
+    """Главное меню (фото + кнопки)."""
     text = get_text("welcome")
-    photo = get_photo(PHOTO_MAIN_MENU)
+    photo_name = get_photo_name("main_menu")
+    photo = get_photo(photo_name)
     keyboard = main_menu_keyboard(user_id)
 
     try:
@@ -301,40 +330,77 @@ async def send_main_menu(message_or_callback, user_id: int):
         menu_message_ids[user_id] = msg.message_id
         return msg.message_id
     except Exception as e:
-        log.error(f"Ошибка отправки главного меню: {e}")
+        log.error(f"Ошибка главного меню: {e}")
         return None
 
 
-async def send_info(user_id: int, text: str, keyboard):
-    """Отправляет/обновляет инфо-сообщение под главным меню."""
+async def send_info_with_photo(user_id: int, photo_key: str, text: str, keyboard):
+    """Отправляет/обновляет инфо-сообщение с фото."""
     old = info_message_ids.get(user_id)
     if old:
         try:
-            await bot.edit_message_text(
+            await bot.delete_message(user_id, old)
+        except Exception:
+            pass
+
+    photo = get_photo(get_photo_name(photo_key))
+
+    try:
+        if photo:
+            msg = await bot.send_photo(
+                user_id,
+                photo,
+                caption=text[:1024],  # лимит caption
+                parse_mode="Markdown",
+                reply_markup=keyboard
+            )
+            # Если текст длиннее 1024 — отдельным сообщением
+            if len(text) > 1024:
+                await bot.send_message(
+                    user_id,
+                    text,
+                    parse_mode="Markdown"
+                )
+        else:
+            msg = await bot.send_message(
+                user_id,
                 text,
+                parse_mode="Markdown",
+                reply_markup=keyboard
+            )
+        info_message_ids[user_id] = msg.message_id
+    except Exception as e:
+        log.error(f"Ошибка инфо-сообщения: {e}")
+
+
+async def edit_info_answer(user_id: int, text: str, keyboard):
+    """Редактирует только текст инфо-сообщения (для FAQ/Контактов)."""
+    old = info_message_ids.get(user_id)
+    if not old:
+        return
+
+    try:
+        await bot.edit_message_caption(
+            chat_id=user_id,
+            message_id=old,
+            caption=text[:1024],
+            parse_mode="Markdown",
+            reply_markup=keyboard
+        )
+    except Exception as e:
+        log.warning(f"Не удалось edit_caption: {e}")
+        try:
+            await bot.edit_message_text(
+                text=text[:4096],
                 chat_id=user_id,
                 message_id=old,
                 parse_mode="Markdown",
                 reply_markup=keyboard
             )
-            return
-        except Exception as e:
-            log.warning(f"Не удалось обновить инфо: {e}")
-            try:
-                await bot.delete_message(user_id, old)
-            except Exception:
-                pass
-
-    try:
-        msg = await bot.send_message(
-            user_id,
-            text,
-            parse_mode="Markdown",
-            reply_markup=keyboard
-        )
-        info_message_ids[user_id] = msg.message_id
-    except Exception as e:
-        log.error(f"Ошибка отправки инфо: {e}")
+        except Exception as e2:
+            log.error(f"Не удалось edit_text: {e2}")
+            # Пересоздаём
+            await send_info_with_photo(user_id, "faq", text, keyboard)
 
 
 # ===================== /start =====================
@@ -350,16 +416,17 @@ async def start_command(message: Message):
         except Exception:
             pass
 
-    await send_main_menu(message, user_id)
+    await send_main_menu(user_id)
 
 
-# ===================== FAQ (с подменю) =====================
+# ===================== FAQ =====================
 @dp.callback_query(F.data == "open_faq")
 async def open_faq(callback: CallbackQuery):
-    await send_info(
+    await send_info_with_photo(
         callback.from_user.id,
-        "❓ *Часто задаваемые вопросы*\n\nВыберите вопрос 👇",
-        compact_questions_keyboard(FAQ, "faq_")
+        "faq",
+        get_text("faq_intro"),
+        questions_keyboard(FAQ, "faq_", include_back=True)
     )
     try:
         await callback.answer()
@@ -374,10 +441,10 @@ async def faq_answer(callback: CallbackQuery):
     if not item:
         await callback.answer("Не найдено", show_alert=True)
         return
-    await send_info(
+    await edit_info_answer(
         callback.from_user.id,
         item["answer"],
-        compact_questions_keyboard(FAQ, "faq_")
+        questions_keyboard(FAQ, "faq_", include_back=True)
     )
     try:
         await callback.answer()
@@ -385,11 +452,12 @@ async def faq_answer(callback: CallbackQuery):
         pass
 
 
-# ===================== ДОСТАВКА (просто текст) =====================
+# ===================== ДОСТАВКА =====================
 @dp.callback_query(F.data == "open_delivery")
 async def open_delivery(callback: CallbackQuery):
-    await send_info(
+    await send_info_with_photo(
         callback.from_user.id,
+        "delivery",
         get_text("delivery"),
         info_keyboard()
     )
@@ -399,11 +467,12 @@ async def open_delivery(callback: CallbackQuery):
         pass
 
 
-# ===================== О БРЕНДЕ (просто текст) =====================
+# ===================== О БРЕНДЕ =====================
 @dp.callback_query(F.data == "open_about")
 async def open_about(callback: CallbackQuery):
-    await send_info(
+    await send_info_with_photo(
         callback.from_user.id,
+        "about",
         get_text("about"),
         info_keyboard()
     )
@@ -413,13 +482,14 @@ async def open_about(callback: CallbackQuery):
         pass
 
 
-# ===================== КОНТАКТЫ (с подменю) =====================
+# ===================== КОНТАКТЫ =====================
 @dp.callback_query(F.data == "open_contacts")
 async def open_contacts(callback: CallbackQuery):
-    await send_info(
+    await send_info_with_photo(
         callback.from_user.id,
-        "📞 *Контакты*\n\nВыберите раздел 👇",
-        compact_questions_keyboard(CONTACTS, "ct_")
+        "contacts",
+        get_text("contacts_intro"),
+        questions_keyboard(CONTACTS, "ct_")
     )
     try:
         await callback.answer()
@@ -434,10 +504,10 @@ async def contacts_answer(callback: CallbackQuery):
     if not item:
         await callback.answer("Не найдено", show_alert=True)
         return
-    await send_info(
+    await edit_info_answer(
         callback.from_user.id,
         item["answer"],
-        compact_questions_keyboard(CONTACTS, "ct_")
+        questions_keyboard(CONTACTS, "ct_")
     )
     try:
         await callback.answer()
@@ -445,7 +515,7 @@ async def contacts_answer(callback: CallbackQuery):
         pass
 
 
-# ===================== ЗАКРЫТИЕ ИНФО =====================
+# ===================== ЗАКРЫТИЕ =====================
 @dp.callback_query(F.data == "close_info")
 async def close_info(callback: CallbackQuery):
     await delete_info(callback.from_user.id)
@@ -614,7 +684,7 @@ async def handle_order(request: web.Request):
             f"✅ *Заказ принят!*\n\n"
             f"Номер: `{order_id}`\n"
             f"Сумма: *{amount} ₽*\n\n"
-            f"Менеджер свяжется с вами для уточнения деталей.",
+            f"Менеджер свяжется с вами.",
             parse_mode="Markdown",
         )
     except Exception:
@@ -688,25 +758,63 @@ async def cmd_admin(message: Message):
     if message.from_user.id != ADMIN_ID:
         await message.answer("⛔ Нет доступа.")
         return
+    await show_admin_panel(message.from_user.id)
+
+
+async def show_admin_panel(user_id: int):
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="📦 Заказы", callback_data="admin_orders")],
             [InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats")],
-            [InlineKeyboardButton(text="✏️ Редактировать тексты", callback_data="admin_edit_texts")],
+            [InlineKeyboardButton(text="📝 Тексты разделов", callback_data="admin_texts")],
+            [InlineKeyboardButton(text="❓ Управление FAQ", callback_data="admin_faq")],
+            [InlineKeyboardButton(text="📞 Управление Контактами", callback_data="admin_contacts")],
+            [InlineKeyboardButton(text="🖼 Фото разделов", callback_data="admin_photos")],
             [InlineKeyboardButton(text="❌ Закрыть", callback_data="admin_close")],
         ]
     )
-    await message.answer(
+    await bot.send_message(
+        user_id,
         "🔧 *Админ-панель MagicHerbs*\n\nВыберите раздел:",
         parse_mode="Markdown",
         reply_markup=keyboard
     )
 
 
+@dp.callback_query(F.data == "admin_back")
+async def admin_back(callback: CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+    # Очищаем состояния
+    editing_state.pop(callback.from_user.id, None)
+    adding_state.pop(callback.from_user.id, None)
+    editing_item.pop(callback.from_user.id, None)
+    waiting_photo.pop(callback.from_user.id, None)
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📦 Заказы", callback_data="admin_orders")],
+            [InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats")],
+            [InlineKeyboardButton(text="📝 Тексты разделов", callback_data="admin_texts")],
+            [InlineKeyboardButton(text="❓ Управление FAQ", callback_data="admin_faq")],
+            [InlineKeyboardButton(text="📞 Управление Контактами", callback_data="admin_contacts")],
+            [InlineKeyboardButton(text="🖼 Фото разделов", callback_data="admin_photos")],
+            [InlineKeyboardButton(text="❌ Закрыть", callback_data="admin_close")],
+        ]
+    )
+    await callback.message.edit_text(
+        "🔧 *Админ-панель MagicHerbs*\n\nВыберите раздел:",
+        parse_mode="Markdown",
+        reply_markup=keyboard
+    )
+    await callback.answer()
+
+
+# ---------- ЗАКАЗЫ ----------
 @dp.callback_query(F.data == "admin_orders")
 async def admin_orders(callback: CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
-        await callback.answer("Нет доступа", show_alert=True)
         return
     if not orders_db:
         await callback.message.edit_text(
@@ -723,11 +831,7 @@ async def admin_orders(callback: CallbackQuery):
     text = "📦 *Последние заказы:*\n\n"
     keyboard_buttons = []
     for order_id, order in orders_list:
-        status_emoji = {
-            "pending_payment": "⏳",
-            "paid": "✅",
-            "cancelled": "❌"
-        }.get(order.get("status", ""), "❓")
+        status_emoji = {"pending_payment": "⏳", "paid": "✅", "cancelled": "❌"}.get(order.get("status", ""), "❓")
         amount = order.get("amount", 0)
         short_id = order_id[-8:] if len(order_id) > 8 else order_id
         text += f"{status_emoji} `{short_id}` — {amount} ₽\n"
@@ -742,7 +846,6 @@ async def admin_orders(callback: CallbackQuery):
 @dp.callback_query(F.data.startswith("admin_order_"))
 async def admin_order_detail(callback: CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
-        await callback.answer("Нет доступа", show_alert=True)
         return
     order_id = callback.data.replace("admin_order_", "")
     order = orders_db.get(order_id)
@@ -752,11 +855,7 @@ async def admin_order_detail(callback: CallbackQuery):
     customer = order.get("customer", {})
     items = order.get("items", [])
     status = order.get("status", "unknown")
-    status_text = {
-        "pending_payment": "⏳ Ожидает оплаты",
-        "paid": "✅ Оплачен",
-        "cancelled": "❌ Отменён"
-    }.get(status, status)
+    status_text = {"pending_payment": "⏳ Ожидает оплаты", "paid": "✅ Оплачен", "cancelled": "❌ Отменён"}.get(status, status)
     if isinstance(items, list):
         items_lines = "\n".join(
             f"  • {esc_md(it.get('title', it.get('id', '?')))} — {it.get('qty', '?')} шт. × {it.get('price', '?')} ₽"
@@ -788,15 +887,12 @@ async def admin_order_detail(callback: CallbackQuery):
 @dp.callback_query(F.data.startswith("admin_mark_paid_"))
 async def admin_mark_paid(callback: CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
-        await callback.answer("Нет доступа", show_alert=True)
         return
     order_id = callback.data.replace("admin_mark_paid_", "")
     order = orders_db.get(order_id)
-    if not order:
-        await callback.answer("Заказ не найден", show_alert=True)
-        return
-    order["status"] = "paid"
-    await callback.answer("Заказ отмечен оплаченным")
+    if order:
+        order["status"] = "paid"
+    await callback.answer("Отмечено оплаченным")
     await callback.message.edit_text(
         f"✅ Заказ `{order_id}` отмечен как *оплаченный*.",
         parse_mode="Markdown",
@@ -809,15 +905,12 @@ async def admin_mark_paid(callback: CallbackQuery):
 @dp.callback_query(F.data.startswith("admin_mark_cancel_"))
 async def admin_mark_cancel(callback: CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
-        await callback.answer("Нет доступа", show_alert=True)
         return
     order_id = callback.data.replace("admin_mark_cancel_", "")
     order = orders_db.get(order_id)
-    if not order:
-        await callback.answer("Заказ не найден", show_alert=True)
-        return
-    order["status"] = "cancelled"
-    await callback.answer("Заказ отменён")
+    if order:
+        order["status"] = "cancelled"
+    await callback.answer("Отменено")
     await callback.message.edit_text(
         f"❌ Заказ `{order_id}` отменён.",
         parse_mode="Markdown",
@@ -830,7 +923,6 @@ async def admin_mark_cancel(callback: CallbackQuery):
 @dp.callback_query(F.data == "admin_stats")
 async def admin_stats(callback: CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
-        await callback.answer("Нет доступа", show_alert=True)
         return
     total_orders = len(orders_db)
     paid_orders = sum(1 for o in orders_db.values() if o.get("status") == "paid")
@@ -855,33 +947,34 @@ async def admin_stats(callback: CallbackQuery):
     await callback.answer()
 
 
-@dp.callback_query(F.data == "admin_edit_texts")
-async def admin_edit_texts(callback: CallbackQuery):
+# ---------- ТЕКСТЫ РАЗДЕЛОВ ----------
+@dp.callback_query(F.data == "admin_texts")
+async def admin_texts(callback: CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
-        await callback.answer("Нет доступа", show_alert=True)
         return
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🌿 Приветствие", callback_data="admin_edit_welcome")],
-            [InlineKeyboardButton(text="🚚 Доставка", callback_data="admin_edit_delivery")],
-            [InlineKeyboardButton(text="🌲 О бренде", callback_data="admin_edit_about")],
+            [InlineKeyboardButton(text="🌿 Приветствие", callback_data="admin_text_welcome")],
+            [InlineKeyboardButton(text="🚚 Доставка", callback_data="admin_text_delivery")],
+            [InlineKeyboardButton(text="🌲 О бренде", callback_data="admin_text_about")],
+            [InlineKeyboardButton(text="❓ FAQ интро", callback_data="admin_text_faq_intro")],
+            [InlineKeyboardButton(text="📞 Контакты интро", callback_data="admin_text_contacts_intro")],
             [InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_back")],
         ]
     )
     await callback.message.edit_text(
-        "✏️ *Редактирование текстов*\n\nВыберите:",
+        "📝 *Тексты разделов*\n\nВыберите, что редактировать:",
         parse_mode="Markdown",
         reply_markup=keyboard
     )
     await callback.answer()
 
 
-@dp.callback_query(F.data.startswith("admin_edit_") & ~F.data.in_({"admin_edit_texts"}))
-async def admin_edit_choice(callback: CallbackQuery):
+@dp.callback_query(F.data.startswith("admin_text_"))
+async def admin_text_choice(callback: CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
-        await callback.answer("Нет доступа", show_alert=True)
         return
-    key = callback.data.replace("admin_edit_", "")
+    key = callback.data.replace("admin_text_", "")
     if key not in DEFAULT_TEXTS:
         await callback.answer("Раздел не найден", show_alert=True)
         return
@@ -889,83 +982,459 @@ async def admin_edit_choice(callback: CallbackQuery):
         "welcome": "Приветствие",
         "delivery": "Доставка",
         "about": "О бренде",
+        "faq_intro": "FAQ (интро)",
+        "contacts_intro": "Контакты (интро)",
     }
     editing_state[callback.from_user.id] = key
     current = get_text(key)
     preview = current[:500] + ("..." if len(current) > 500 else "")
     await callback.message.edit_text(
         f"✏️ *Редактирование: {names.get(key, key)}*\n\n"
-        f"*Текущий:*\n{preview}\n\n"
+        f"*Текущий текст:*\n{preview}\n\n"
         f"Отправьте новый текст одним сообщением.",
         parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup(
-            inline_keyboard=[[InlineKeyboardButton(text="❌ Отмена", callback_data="admin_cancel_edit")]]
+            inline_keyboard=[[InlineKeyboardButton(text="❌ Отмена", callback_data="admin_cancel")]]
         )
     )
     await callback.answer()
 
 
-@dp.callback_query(F.data == "admin_cancel_edit")
-async def admin_cancel_edit(callback: CallbackQuery):
+@dp.callback_query(F.data == "admin_cancel")
+async def admin_cancel(callback: CallbackQuery):
     editing_state.pop(callback.from_user.id, None)
+    adding_state.pop(callback.from_user.id, None)
+    editing_item.pop(callback.from_user.id, None)
+    waiting_photo.pop(callback.from_user.id, None)
     await callback.answer("Отменено")
-    await callback.message.edit_text(
-        "✏️ Отменено.",
-        reply_markup=InlineKeyboardMarkup(
-            inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_edit_texts")]]
-        )
+    await admin_back(callback)
+
+
+# ---------- УПРАВЛЕНИЕ FAQ ----------
+@dp.callback_query(F.data == "admin_faq")
+async def admin_faq(callback: CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        return
+    text = "❓ *Управление FAQ*\n\nВсего вопросов: *" + str(len(FAQ)) + "*\n\nВыберите действие:"
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="➕ Добавить вопрос", callback_data="faq_add")],
+            [InlineKeyboardButton(text="📋 Список вопросов", callback_data="faq_list")],
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_back")],
+        ]
     )
+    await callback.message.edit_text(text, parse_mode="Markdown", reply_markup=keyboard)
+    await callback.answer()
 
 
-@dp.message(F.text & ~F.text.startswith("/"))
-async def handle_text_edit(message: Message):
-    if message.from_user.id != ADMIN_ID:
+@dp.callback_query(F.data == "faq_list")
+async def faq_list(callback: CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
         return
-    key = editing_state.get(message.from_user.id)
-    if not key:
+    if not FAQ:
+        await callback.answer("Пусто", show_alert=True)
         return
-    TEXTS[key] = message.text
-    save_json(TEXTS_FILE, TEXTS)
-    editing_state.pop(message.from_user.id, None)
-    names = {
-        "welcome": "Приветствие",
-        "delivery": "Доставка",
-        "about": "О бренде",
-    }
-    await message.answer(
-        f"✅ *Текст «{names.get(key, key)}» обновлён!*",
+    buttons = []
+    for key, item in FAQ.items():
+        buttons.append([
+            InlineKeyboardButton(text=item["title"][:40], callback_data=f"faq_edit_{key}")
+        ])
+    buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_faq")])
+    await callback.message.edit_text(
+        "📋 *Список вопросов FAQ*\n\nВыберите для редактирования:",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("faq_edit_"))
+async def faq_edit(callback: CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        return
+    key = callback.data.replace("faq_edit_", "")
+    item = FAQ.get(key)
+    if not item:
+        await callback.answer("Не найдено", show_alert=True)
+        return
+    text = (
+        f"✏️ *Вопрос:* {item['title']}\n\n"
+        f"*Ответ:*\n{item['answer'][:300]}...\n\n"
+        f"Что редактируем?"
+    )
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="✏️ Название кнопки", callback_data=f"faq_edit_title_{key}")],
+            [InlineKeyboardButton(text="📝 Ответ", callback_data=f"faq_edit_answer_{key}")],
+            [InlineKeyboardButton(text="🗑 Удалить", callback_data=f"faq_delete_{key}")],
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="faq_list")],
+        ]
+    )
+    await callback.message.edit_text(text, parse_mode="Markdown", reply_markup=keyboard)
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("faq_edit_title_"))
+async def faq_edit_title(callback: CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        return
+    key = callback.data.replace("faq_edit_title_", "")
+    editing_item[callback.from_user.id] = {"type": "faq", "key": key, "field": "title"}
+    await callback.message.edit_text(
+        f"✏️ Отправьте *новое название кнопки* для вопроса «{FAQ[key]['title']}»:",
         parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup(
-            inline_keyboard=[[InlineKeyboardButton(text="⬅️ В админ-панель", callback_data="admin_back")]]
+            inline_keyboard=[[InlineKeyboardButton(text="❌ Отмена", callback_data="admin_cancel")]]
         )
     )
+    await callback.answer()
 
 
-@dp.callback_query(F.data == "admin_back")
-async def admin_back(callback: CallbackQuery):
+@dp.callback_query(F.data.startswith("faq_edit_answer_"))
+async def faq_edit_answer(callback: CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
-        await callback.answer("Нет доступа", show_alert=True)
+        return
+    key = callback.data.replace("faq_edit_answer_", "")
+    editing_item[callback.from_user.id] = {"type": "faq", "key": key, "field": "answer"}
+    await callback.message.edit_text(
+        f"✏️ Отправьте *новый ответ* для вопроса «{FAQ[key]['title']}»:",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text="❌ Отмена", callback_data="admin_cancel")]]
+        )
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("faq_delete_"))
+async def faq_delete(callback: CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        return
+    key = callback.data.replace("faq_delete_", "")
+    if key in FAQ:
+        del FAQ[key]
+        save_json(FAQ_FILE, FAQ)
+        await callback.answer("Удалено", show_alert=True)
+    await admin_faq(callback)
+
+
+@dp.callback_query(F.data == "faq_add")
+async def faq_add(callback: CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        return
+    adding_state[callback.from_user.id] = {"type": "faq", "step": "title"}
+    await callback.message.edit_text(
+        "➕ *Новый вопрос FAQ*\n\nШаг 1/2: Отправьте *название кнопки* (например, «🌿 Натуральный?»):",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text="❌ Отмена", callback_data="admin_cancel")]]
+        )
+    )
+    await callback.answer()
+
+
+# ---------- УПРАВЛЕНИЕ КОНТАКТАМИ ----------
+@dp.callback_query(F.data == "admin_contacts")
+async def admin_contacts(callback: CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        return
+    text = "📞 *Управление Контактами*\n\nВсего пунктов: *" + str(len(CONTACTS)) + "*\n\nВыберите действие:"
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="➕ Добавить пункт", callback_data="ct_add")],
+            [InlineKeyboardButton(text="📋 Список пунктов", callback_data="ct_list")],
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_back")],
+        ]
+    )
+    await callback.message.edit_text(text, parse_mode="Markdown", reply_markup=keyboard)
+    await callback.answer()
+
+
+@dp.callback_query(F.data == "ct_list")
+async def ct_list(callback: CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        return
+    if not CONTACTS:
+        await callback.answer("Пусто", show_alert=True)
+        return
+    buttons = []
+    for key, item in CONTACTS.items():
+        buttons.append([
+            InlineKeyboardButton(text=item["title"][:40], callback_data=f"ct_edit_{key}")
+        ])
+    buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_contacts")])
+    await callback.message.edit_text(
+        "📋 *Список пунктов Контактов*\n\nВыберите для редактирования:",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("ct_edit_"))
+async def ct_edit(callback: CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        return
+    key = callback.data.replace("ct_edit_", "")
+    item = CONTACTS.get(key)
+    if not item:
+        await callback.answer("Не найдено", show_alert=True)
+        return
+    text = (
+        f"✏️ *Пункт:* {item['title']}\n\n"
+        f"*Ответ:*\n{item['answer'][:300]}...\n\n"
+        f"Что редактируем?"
+    )
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="✏️ Название кнопки", callback_data=f"ct_edit_title_{key}")],
+            [InlineKeyboardButton(text="📝 Ответ", callback_data=f"ct_edit_answer_{key}")],
+            [InlineKeyboardButton(text="🗑 Удалить", callback_data=f"ct_delete_{key}")],
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="ct_list")],
+        ]
+    )
+    await callback.message.edit_text(text, parse_mode="Markdown", reply_markup=keyboard)
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("ct_edit_title_"))
+async def ct_edit_title(callback: CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        return
+    key = callback.data.replace("ct_edit_title_", "")
+    editing_item[callback.from_user.id] = {"type": "contacts", "key": key, "field": "title"}
+    await callback.message.edit_text(
+        f"✏️ Отправьте *новое название кнопки*:",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text="❌ Отмена", callback_data="admin_cancel")]]
+        )
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("ct_edit_answer_"))
+async def ct_edit_answer(callback: CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        return
+    key = callback.data.replace("ct_edit_answer_", "")
+    editing_item[callback.from_user.id] = {"type": "contacts", "key": key, "field": "answer"}
+    await callback.message.edit_text(
+        f"✏️ Отправьте *новый ответ*:",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text="❌ Отмена", callback_data="admin_cancel")]]
+        )
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("ct_delete_"))
+async def ct_delete(callback: CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        return
+    key = callback.data.replace("ct_delete_", "")
+    if key in CONTACTS:
+        del CONTACTS[key]
+        save_json(CONTACTS_FILE, CONTACTS)
+        await callback.answer("Удалено", show_alert=True)
+    await admin_contacts(callback)
+
+
+@dp.callback_query(F.data == "ct_add")
+async def ct_add(callback: CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        return
+    adding_state[callback.from_user.id] = {"type": "contacts", "step": "title"}
+    await callback.message.edit_text(
+        "➕ *Новый пункт Контактов*\n\nШаг 1/2: Отправьте *название кнопки*:",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text="❌ Отмена", callback_data="admin_cancel")]]
+        )
+    )
+    await callback.answer()
+
+
+# ---------- ФОТО РАЗДЕЛОВ ----------
+@dp.callback_query(F.data == "admin_photos")
+async def admin_photos(callback: CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
         return
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="📦 Заказы", callback_data="admin_orders")],
-            [InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats")],
-            [InlineKeyboardButton(text="✏️ Редактировать тексты", callback_data="admin_edit_texts")],
-            [InlineKeyboardButton(text="❌ Закрыть", callback_data="admin_close")],
+            [InlineKeyboardButton(text="🏠 Главное меню", callback_data="photo_main_menu")],
+            [InlineKeyboardButton(text="❓ FAQ", callback_data="photo_faq")],
+            [InlineKeyboardButton(text="🚚 Доставка", callback_data="photo_delivery")],
+            [InlineKeyboardButton(text="🌲 О бренде", callback_data="photo_about")],
+            [InlineKeyboardButton(text="📞 Контакты", callback_data="photo_contacts")],
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_back")],
         ]
     )
     await callback.message.edit_text(
-        "🔧 *Админ-панель MagicHerbs*\n\nВыберите раздел:",
+        "🖼 *Фото разделов*\n\nВыберите раздел, чтобы заменить фото.\n\n"
+        "Отправьте новое фото одним сообщением.",
         parse_mode="Markdown",
         reply_markup=keyboard
     )
     await callback.answer()
 
 
+@dp.callback_query(F.data.startswith("photo_"))
+async def photo_choice(callback: CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        return
+    key = callback.data.replace("photo_", "")
+    if key not in DEFAULT_PHOTOS:
+        await callback.answer("Раздел не найден", show_alert=True)
+        return
+    waiting_photo[callback.from_user.id] = key
+    names = {
+        "main_menu": "Главное меню",
+        "faq": "FAQ",
+        "delivery": "Доставка",
+        "about": "О бренде",
+        "contacts": "Контакты",
+    }
+    await callback.message.edit_text(
+        f"🖼 Замена фото: *{names.get(key, key)}*\n\n"
+        f"Отправьте новое фото одним сообщением.",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text="❌ Отмена", callback_data="admin_cancel")]]
+        )
+    )
+    await callback.answer()
+
+
+# ---------- ОБРАБОТКА ТЕКСТОВЫХ СООБЩЕНИЙ (АДМИН) ----------
+@dp.message(F.text & ~F.text.startswith("/"))
+async def handle_admin_text(message: Message):
+    if message.from_user.id != ADMIN_ID:
+        return
+
+    user_id = message.from_user.id
+
+    # 1. Редактирование текстов разделов
+    if user_id in editing_state:
+        key = editing_state.pop(user_id)
+        TEXTS[key] = message.text
+        save_json(TEXTS_FILE, TEXTS)
+        names = {
+            "welcome": "Приветствие",
+            "delivery": "Доставка",
+            "about": "О бренде",
+            "faq_intro": "FAQ (интро)",
+            "contacts_intro": "Контакты (интро)",
+        }
+        await message.answer(
+            f"✅ *Текст «{names.get(key, key)}» обновлён!*",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[[InlineKeyboardButton(text="⬅️ В админ-панель", callback_data="admin_back")]]
+            )
+        )
+        return
+
+    # 2. Редактирование элемента FAQ/Контактов
+    if user_id in editing_item:
+        info = editing_item.pop(user_id)
+        typ = info["type"]
+        key = info["key"]
+        field = info["field"]
+        data = FAQ if typ == "faq" else CONTACTS
+        if key in data:
+            data[key][field] = message.text
+            save_json(FAQ_FILE if typ == "faq" else CONTACTS_FILE, data)
+            await message.answer(
+                f"✅ *{'Вопрос' if typ == 'faq' else 'Пункт'} обновлён!*",
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[[InlineKeyboardButton(text="⬅️ В админ-панель", callback_data="admin_back")]]
+                )
+            )
+        return
+
+    # 3. Добавление нового элемента FAQ/Контактов
+    if user_id in adding_state:
+        state = adding_state[user_id]
+        typ = state["type"]
+        step = state["step"]
+
+        if step == "title":
+            state["title"] = message.text
+            state["step"] = "answer"
+            adding_state[user_id] = state
+            await message.answer(
+                "Шаг 2/2: Отправьте *ответ* на этот вопрос/пункт:",
+                parse_mode="Markdown"
+            )
+            return
+
+        if step == "answer":
+            title = state["title"]
+            answer = message.text
+            # Генерируем ключ
+            new_key = f"{'q' if typ == 'faq' else 'c'}_{int(asyncio.get_event_loop().time() * 1000)}"
+            data = FAQ if typ == "faq" else CONTACTS
+            data[new_key] = {"title": title, "answer": answer}
+            save_json(FAQ_FILE if typ == "faq" else CONTACTS_FILE, data)
+            adding_state.pop(user_id, None)
+            await message.answer(
+                f"✅ *{'Вопрос' if typ == 'faq' else 'Пункт'} добавлен!*",
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[[InlineKeyboardButton(text="⬅️ В админ-панель", callback_data="admin_back")]]
+                )
+            )
+            return
+
+
+# ---------- ОБРАБОТКА ФОТО (АДМИН) ----------
+@dp.message(F.photo)
+async def handle_admin_photo(message: Message):
+    if message.from_user.id != ADMIN_ID:
+        return
+
+    user_id = message.from_user.id
+    if user_id not in waiting_photo:
+        return
+
+    key = waiting_photo.pop(user_id)
+    try:
+        # Скачиваем фото
+        photo = message.photo[-1]
+        file = await bot.get_file(photo.file_id)
+        new_filename = f"{key}_{photo.file_id}.jpg"
+        file_path = PHOTOS_DIR / new_filename
+        await bot.download_file(file.file_path, destination=str(file_path))
+
+        # Обновляем путь
+        PHOTOS[key] = new_filename
+        save_json(PHOTOS_FILE, PHOTOS)
+
+        names = {
+            "main_menu": "Главное меню",
+            "faq": "FAQ",
+            "delivery": "Доставка",
+            "about": "О бренде",
+            "contacts": "Контакты",
+        }
+        await message.answer(
+            f"✅ *Фото «{names.get(key, key)}» обновлено!*",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[[InlineKeyboardButton(text="⬅️ В админ-панель", callback_data="admin_back")]]
+            )
+        )
+    except Exception as e:
+        log.exception(f"Ошибка загрузки фото: {e}")
+        await message.answer(f"❌ Ошибка: {e}")
+
+
 @dp.callback_query(F.data == "admin_close")
 async def admin_close(callback: CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
-        await callback.answer("Нет доступа", show_alert=True)
         return
     try:
         await callback.message.delete()
@@ -1000,17 +1469,16 @@ async def main():
         log.error(f"Не удалось получить информацию о боте: {e}")
         return
     if YOOKASSA_SHOP_ID and YOOKASSA_SECRET_KEY:
-        log.info("💳 ЮKassa настроена — автоматическая оплата доступна")
+        log.info("💳 ЮKassa настроена")
     else:
-        log.warning("💳 ЮKassa НЕ настроена — заказы уходят в ручной режим")
+        log.warning("💳 ЮKassa НЕ настроена")
     await start_web_server()
-    log.info("🚀 Бот запущен и готов к работе!")
+    log.info("🚀 Бот запущен!")
     while True:
         try:
             await dp.start_polling(bot, skip_updates=True)
         except Exception as e:
             log.error(f"Ошибка polling: {e}")
-            log.info("Перезапуск через 5 секунд...")
             await asyncio.sleep(5)
 
 
@@ -1019,10 +1487,8 @@ if __name__ == "__main__":
         try:
             asyncio.run(main())
         except KeyboardInterrupt:
-            log.info("Бот остановлен вручную")
             break
         except Exception as e:
             log.error(f"Критическая ошибка: {e}")
-            log.info("Перезапуск через 10 секунд...")
             import time
             time.sleep(10)
