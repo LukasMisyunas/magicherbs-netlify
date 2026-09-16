@@ -526,6 +526,29 @@ async def close_info(callback: CallbackQuery):
 
 
 # ===================== ЗАКАЗЫ =====================
+async def safe_edit_message(callback: CallbackQuery, text: str, keyboard):
+    """Безопасно редактирует сообщение. Игнорирует 'message is not modified'."""
+    try:
+        await callback.message.edit_text(
+            text,
+            parse_mode="Markdown",
+            reply_markup=keyboard
+        )
+    except Exception as e:
+        if "message is not modified" in str(e):
+            pass  # Игнорируем
+        else:
+            log.warning(f"Ошибка edit_text: {e}")
+            try:
+                await callback.message.delete()
+                await bot.send_message(
+                    callback.from_user.id,
+                    text,
+                    parse_mode="Markdown",
+                    reply_markup=keyboard
+                )
+            except Exception as e2:
+                log.error(f"Не удалось отправить заново: {e2}")
 def esc_md(text: str) -> str:
     for ch in ("\\", "_", "*", "`", "["):
         text = text.replace(ch, "\\" + ch)
@@ -786,6 +809,7 @@ async def admin_back(callback: CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
         await callback.answer("Нет доступа", show_alert=True)
         return
+
     # Очищаем состояния
     editing_state.pop(callback.from_user.id, None)
     adding_state.pop(callback.from_user.id, None)
@@ -803,11 +827,22 @@ async def admin_back(callback: CallbackQuery):
             [InlineKeyboardButton(text="❌ Закрыть", callback_data="admin_close")],
         ]
     )
-    await callback.message.edit_text(
-        "🔧 *Админ-панель MagicHerbs*\n\nВыберите раздел:",
-        parse_mode="Markdown",
-        reply_markup=keyboard
-    )
+
+    text = "🔧 *Админ-панель MagicHerbs*\n\nВыберите раздел:"
+
+    try:
+        await callback.message.edit_text(
+            text,
+            parse_mode="Markdown",
+            reply_markup=keyboard
+        )
+    except Exception as e:
+        # Игнорируем ошибку "message is not modified"
+        if "message is not modified" in str(e):
+            pass
+        else:
+            log.warning(f"Не удалось отредактировать админ-панель: {e}")
+
     await callback.answer()
 
 
